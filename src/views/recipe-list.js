@@ -1,0 +1,237 @@
+// 菜谱列表视图：列表 / 详情 / 编辑 / 删除
+import { renderRecipeForm } from './recipe-form.js';
+import {
+  getAllRecipes,
+  getRecipe,
+  updateRecipe,
+  deleteRecipe,
+} from '../db.js';
+
+function formatDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function escapeText(s) {
+  return String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
+export function renderRecipeListView(container, services = {}) {
+  const _getAllRecipes = services.getAllRecipes || getAllRecipes;
+  const _getRecipe = services.getRecipe || getRecipe;
+  const _updateRecipe = services.updateRecipe || updateRecipe;
+  const _deleteRecipe = services.deleteRecipe || deleteRecipe;
+  const _onAdd = services.onAdd || (() => {});
+
+  let state = { view: 'list', id: null };
+
+  function render() {
+    container.innerHTML = '';
+    if (state.view === 'list') renderList();
+    else if (state.view === 'detail') renderDetail(state.id);
+    else if (state.view === 'edit') renderEdit(state.id);
+  }
+
+  function go(view, id = null) {
+    state = { view, id };
+    render();
+  }
+
+  // ============ 列表 ============
+  async function renderList() {
+    container.innerHTML = `
+      <div class="list-header">
+        <h2 class="section-title">我的菜谱</h2>
+        <button id="btn-add-recipe" class="btn btn-primary" type="button">+ 新增菜谱</button>
+      </div>
+      <div id="recipe-list-body" class="recipe-list-body">
+        <p class="placeholder">加载中…</p>
+      </div>
+    `;
+    container.querySelector('#btn-add-recipe').addEventListener('click', () => _onAdd());
+
+    const $body = container.querySelector('#recipe-list-body');
+    let recipes = [];
+    try {
+      recipes = await _getAllRecipes();
+    } catch (e) {
+      $body.innerHTML = `<div class="status-box status-error">读取菜谱失败：${escapeText(e.message)}</div>`;
+      return;
+    }
+    if (recipes.length === 0) {
+      $body.innerHTML = `
+        <div class="empty-state">
+          <p>还没有保存任何菜谱。</p>
+          <button id="btn-empty-add" class="btn btn-primary" type="button">+ 新增第一条菜谱</button>
+        </div>
+      `;
+      $body.querySelector('#btn-empty-add').addEventListener('click', () => _onAdd());
+      return;
+    }
+    $body.innerHTML = recipes
+      .map(
+        (r) => `
+        <div class="recipe-card" data-id="${r.id}" tabindex="0" role="button">
+          <div class="recipe-card-head">
+            <span class="recipe-card-name">${escapeText(r.name)}</span>
+            <span class="recipe-card-meta">${r.ingredients?.length || 0} 种食材</span>
+          </div>
+          ${r.intro ? `<p class="recipe-card-intro">${escapeText(r.intro)}</p>` : ''}
+          <div class="recipe-card-time">${escapeText(formatDate(r.created_at))}</div>
+        </div>
+      `
+      )
+      .join('');
+    $body.querySelectorAll('.recipe-card').forEach((card) => {
+      const open = () => go('detail', Number(card.dataset.id));
+      card.addEventListener('click', open);
+      card.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          open();
+        }
+      });
+    });
+  }
+
+  // ============ 详情 ============
+  async function renderDetail(id) {
+    container.innerHTML = `<p class="placeholder">加载中…</p>`;
+    let recipe;
+    try {
+      recipe = await _getRecipe(id);
+    } catch (e) {
+      container.innerHTML = `<div class="status-box status-error">读取失败：${escapeText(e.message)}</div>`;
+      return;
+    }
+    if (!recipe) {
+      container.innerHTML = `
+        <div class="status-box status-error">菜谱不存在或已被删除。</div>
+        <button id="btn-back-list" class="btn" type="button">← 返回列表</button>
+      `;
+      container.querySelector('#btn-back-list').addEventListener('click', () => go('list'));
+      return;
+    }
+    container.innerHTML = `
+      <div class="detail-view">
+        <div class="detail-actions">
+          <button id="btn-back-list" class="btn" type="button">← 返回</button>
+          <button id="btn-edit" class="btn" type="button">编辑</button>
+          <button id="btn-delete" class="btn btn-danger" type="button">删除</button>
+        </div>
+        <h2 class="detail-name">${escapeText(recipe.name)}</h2>
+        ${recipe.intro ? `<p class="detail-intro">${escapeText(recipe.intro)}</p>` : ''}
+
+        <h3 class="detail-subtitle">食材</h3>
+        <ul class="detail-ingredients">
+          ${(recipe.ingredients || [])
+            .map(
+              (i) =>
+                `<li><span class="ing-name">${escapeText(i.name)}</span><span class="ing-amount">${escapeText(i.amount)}</span></li>`
+            )
+            .join('')}
+        </ul>
+
+        <h3 class="detail-subtitle">步骤</h3>
+        <ol class="detail-steps">
+          ${(recipe.steps || []).map((s) => `<li>${escapeText(s)}</li>`).join('')}
+        </ol>
+
+        ${
+          recipe.tips
+            ? `<h3 class="detail-subtitle">小贴士</h3><p class="detail-tips">${escapeText(recipe.tips)}</p>`
+            : ''
+        }
+
+        <div class="detail-time">
+          <span>创建：${escapeText(formatDate(recipe.created_at))}</span>
+          <span>更新：${escapeText(formatDate(recipe.updated_at))}</span>
+        </div>
+
+        <div id="detail-status" class="status-box"></div>
+      </div>
+    `;
+    container.querySelector('#btn-back-list').addEventListener('click', () => go('list'));
+    container.querySelector('#btn-edit').addEventListener('click', () => go('edit', id));
+    container.querySelector('#btn-delete').addEventListener('click', async () => {
+      if (!confirm(`确定删除菜谱「${recipe.name}」吗？此操作不可撤销。`)) return;
+      const $status = container.querySelector('#detail-status');
+      try {
+        const ok = await _deleteRecipe(id);
+        if (ok) {
+          go('list');
+        } else {
+          $status.textContent = '删除失败：菜谱不存在';
+          $status.className = 'status-box status-error';
+        }
+      } catch (e) {
+        $status.textContent = `删除失败：${e.message}`;
+        $status.className = 'status-box status-error';
+      }
+    });
+  }
+
+  // ============ 编辑 ============
+  async function renderEdit(id) {
+    container.innerHTML = `<p class="placeholder">加载中…</p>`;
+    let recipe;
+    try {
+      recipe = await _getRecipe(id);
+    } catch (e) {
+      container.innerHTML = `<div class="status-box status-error">读取失败：${escapeText(e.message)}</div>`;
+      return;
+    }
+    if (!recipe) {
+      container.innerHTML = `
+        <div class="status-box status-error">菜谱不存在或已被删除。</div>
+        <button id="btn-back-list" class="btn" type="button">← 返回列表</button>
+      `;
+      container.querySelector('#btn-back-list').addEventListener('click', () => go('list'));
+      return;
+    }
+    container.innerHTML = `
+      <div class="edit-view">
+        <div class="detail-actions">
+          <button id="btn-cancel-edit" class="btn" type="button">← 取消</button>
+        </div>
+        <h2 class="section-title">编辑菜谱</h2>
+        <div id="edit-form"></div>
+        <div class="add-actions">
+          <button id="btn-save-edit" class="btn btn-primary" type="button">保存修改</button>
+          <button id="btn-cancel-edit-2" class="btn" type="button">取消</button>
+        </div>
+        <div id="edit-status" class="status-box"></div>
+      </div>
+    `;
+    const form = renderRecipeForm(container.querySelector('#edit-form'), recipe);
+    const $status = container.querySelector('#edit-status');
+
+    async function save() {
+      const r = form.getRecipe();
+      if (!r.name || r.ingredients.length === 0 || r.steps.length === 0) {
+        $status.textContent = '保存前请确保菜名、食材、步骤都不为空';
+        $status.className = 'status-box status-error';
+        return;
+      }
+      const btn = container.querySelector('#btn-save-edit');
+      btn.disabled = true;
+      btn.textContent = '保存中…';
+      try {
+        await _updateRecipe({ ...r, id });
+        go('detail', id);
+      } catch (e) {
+        $status.textContent = `保存失败：${e.message}`;
+        $status.className = 'status-box status-error';
+        btn.disabled = false;
+        btn.textContent = '保存修改';
+      }
+    }
+    container.querySelector('#btn-save-edit').addEventListener('click', save);
+    container.querySelector('#btn-cancel-edit').addEventListener('click', () => go('detail', id));
+    container.querySelector('#btn-cancel-edit-2').addEventListener('click', () => go('detail', id));
+  }
+
+  render();
+}

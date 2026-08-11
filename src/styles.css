@@ -1,0 +1,525 @@
+:root {
+  --bg: #faf7f2;
+  --surface: #ffffff;
+  --border: #e5e0d8;
+  --text: #2c2c2c;
+  --muted: #888;
+  --primary: #c75b39;
+  --primary-hover: #a8472a;
+  --danger: #d33;
+  --success: #2e8b57;
+  --warning: #d9a400;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+.app-shell {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 0 16px 64px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 10;
+}
+
+.app-title {
+  font-size: 20px;
+  margin: 0;
+  color: var(--primary);
+}
+
+.app-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-btn {
+  border: none;
+  background: transparent;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.nav-btn:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.nav-btn.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.app-content {
+  padding: 24px 0;
+}
+
+.placeholder {
+  color: var(--muted);
+  text-align: center;
+  padding: 48px 0;
+}
+
+button {
+  font-family: inherit;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.btn:hover {
+  border-color: var(--primary);
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.btn-danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  width: 100%;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.row > * {
+  flex: 1;
+}
+
+/* 设置页 */
+.section-title {
+  font-size: 18px;
+  margin: 0 0 8px;
+}
+
+.section-desc {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 24px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.status-box {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  min-height: 20px;
+  border: 1px solid transparent;
+}
+
+.status-box:empty {
+  padding: 0;
+  border: none;
+  min-height: 0;
+}
+
+.status-info {
+  background: #eef4fb;
+  border-color: #cfe2f3;
+  color: #1a5699;
+}
+
+.status-success {
+  background: #edf8f0;
+  border-color: #c8e6d2;
+  color: var(--success);
+}
+
+.status-warning {
+  background: #fdf6e3;
+  border-color: #f0e0a8;
+  color: #8a6d00;
+}
+
+.status-error {
+  background: #fdecea;
+  border-color: #f5c6c0;
+  color: var(--danger);
+}
+
+/* 新增菜谱页 */
+.add-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.image-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.img-thumb {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  max-width: 160px;
+}
+
+.img-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.img-size {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.stream-progress {
+  padding: 8px 14px;
+  background: #eef4fb;
+  border: 1px solid #cfe2f3;
+  border-radius: 8px;
+  color: #1a5699;
+  font-size: 13px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.stream-progress .progress-label {
+  font-weight: 500;
+}
+
+.stream-progress .progress-meta {
+  font-size: 12px;
+  color: #5a8ab5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.stream-progress .token-count {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 600;
+  color: #1a5699;
+}
+
+.stream-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  background: var(--surface);
+}
+
+.stream-panel summary {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  user-select: none;
+}
+
+.stream-panel .hint {
+  color: var(--muted);
+  font-weight: normal;
+  font-size: 12px;
+}
+
+.stream-text {
+  margin: 0;
+  padding: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 320px;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  color: var(--text);
+  min-height: 24px;
+}
+
+.stream-text:empty::before {
+  content: '等待输出…';
+  color: var(--muted);
+}
+
+.sub-nav {
+  margin-bottom: 8px;
+}
+
+/* 菜谱表单 */
+.recipe-form .ing-row,
+.recipe-form .step-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  margin-bottom: 8px;
+}
+
+.recipe-form .ing-row .ing-name {
+  flex: 2;
+}
+
+.recipe-form .ing-row .ing-amount {
+  flex: 1;
+}
+
+.recipe-form .step-row .step-idx {
+  flex: 0 0 auto;
+  width: 24px;
+  text-align: right;
+  color: var(--muted);
+  font-size: 13px;
+  padding-top: 8px;
+}
+
+.recipe-form .step-row .step-text {
+  flex: 1;
+  min-height: 60px;
+}
+
+.btn-mini {
+  padding: 6px 10px;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.recipe-list-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--muted);
+}
+
+.empty-state p {
+  margin: 0 0 16px;
+}
+
+.recipe-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.recipe-card:hover,
+.recipe-card:focus {
+  border-color: var(--primary);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+  outline: none;
+}
+
+.recipe-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.recipe-card-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.recipe-card-meta {
+  font-size: 12px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.recipe-card-intro {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recipe-card-time {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* 详情 / 编辑 */
+.detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.detail-name {
+  font-size: 22px;
+  margin: 0 0 8px;
+}
+
+.detail-intro {
+  color: var(--muted);
+  margin: 0 0 20px;
+}
+
+.detail-subtitle {
+  font-size: 15px;
+  margin: 24px 0 10px;
+  color: var(--primary);
+}
+
+.detail-ingredients {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.detail-ingredients li {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.detail-ingredients li:last-child {
+  border-bottom: none;
+}
+
+.detail-ingredients .ing-amount {
+  color: var(--muted);
+}
+
+.detail-steps {
+  padding-left: 22px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.detail-steps li {
+  margin-bottom: 6px;
+}
+
+.detail-tips {
+  background: #fdf6e3;
+  border: 1px solid #f0e0a8;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin: 0;
+}
+
+.detail-time {
+  margin-top: 24px;
+  display: flex;
+  gap: 24px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.edit-view .section-title {
+  margin-bottom: 16px;
+}
