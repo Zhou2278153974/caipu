@@ -258,3 +258,94 @@ describe('菜谱列表 - 删除', () => {
     expect(c.querySelector('#detail-status').textContent).toContain('不存在');
   });
 });
+
+describe('菜谱列表 - 搜索', () => {
+  const MULTI = [
+    { id: 1, name: '番茄炒蛋', intro: '', ingredients: [{ name: '番茄', amount: '2个' }], steps: ['炒'], tips: '', created_at: 1700000000000, updated_at: 1700000001000 },
+    { id: 2, name: '蛋炒饭', intro: '', ingredients: [{ name: '鸡蛋', amount: '2个' }], steps: ['炒'], tips: '', created_at: 1700000002000, updated_at: 1700000002000 },
+    { id: 3, name: '红烧肉', intro: '', ingredients: [{ name: '五花肉', amount: '500g' }], steps: ['炖'], tips: '', created_at: 1700000003000, updated_at: 1700000003000 },
+    { id: 4, name: '番茄蛋汤', intro: '', ingredients: [{ name: '番茄', amount: '1个' }], steps: ['煮'], tips: '', created_at: 1700000004000, updated_at: 1700000004000 },
+  ];
+
+  function makeMultiServices(overrides = {}) {
+    return {
+      getAllRecipes: vi.fn().mockResolvedValue(MULTI),
+      getRecipe: vi.fn().mockResolvedValue(MULTI[0]),
+      updateRecipe: vi.fn().mockResolvedValue(MULTI[0]),
+      deleteRecipe: vi.fn().mockResolvedValue(true),
+      onAdd: vi.fn(),
+      ...overrides,
+    };
+  }
+
+  it('搜索框存在且初始展示全部菜谱', async () => {
+    const c = mount(makeMultiServices());
+    await flush();
+    expect(c.querySelector('#recipe-search')).toBeTruthy();
+    expect(c.querySelectorAll('.recipe-card')).toHaveLength(4);
+  });
+
+  it('输入"蛋"模糊匹配菜名含"蛋"的所有菜谱', async () => {
+    const c = mount(makeMultiServices());
+    await flush();
+    const input = c.querySelector('#recipe-search');
+    input.value = '蛋';
+    input.dispatchEvent(new Event('input'));
+    await flush();
+    const names = [...c.querySelectorAll('.recipe-card-name')].map((n) => n.textContent);
+    expect(names).toHaveLength(3);
+    expect(names).toContain('番茄炒蛋');
+    expect(names).toContain('蛋炒饭');
+    expect(names).toContain('番茄蛋汤');
+    expect(names).not.toContain('红烧肉');
+  });
+
+  it('输入"番茄"匹配含"番茄"的菜谱', async () => {
+    const c = mount(makeMultiServices());
+    await flush();
+    const input = c.querySelector('#recipe-search');
+    input.value = '番茄';
+    input.dispatchEvent(new Event('input'));
+    await flush();
+    const names = [...c.querySelectorAll('.recipe-card-name')].map((n) => n.textContent);
+    expect(names).toHaveLength(2);
+    expect(names).toContain('番茄炒蛋');
+    expect(names).toContain('番茄蛋汤');
+  });
+
+  it('搜索不匹配时显示"没有匹配的菜谱"', async () => {
+    const c = mount(makeMultiServices());
+    await flush();
+    const input = c.querySelector('#recipe-search');
+    input.value = '不存在的菜';
+    input.dispatchEvent(new Event('input'));
+    await flush();
+    expect(c.querySelectorAll('.recipe-card')).toHaveLength(0);
+    expect(c.querySelector('#recipe-list-body').textContent).toContain('没有匹配');
+  });
+
+  it('清空搜索框恢复显示全部菜谱', async () => {
+    const c = mount(makeMultiServices());
+    await flush();
+    const input = c.querySelector('#recipe-search');
+    input.value = '蛋';
+    input.dispatchEvent(new Event('input'));
+    await flush();
+    expect(c.querySelectorAll('.recipe-card')).toHaveLength(3);
+    // 清空
+    input.value = '';
+    input.dispatchEvent(new Event('input'));
+    await flush();
+    expect(c.querySelectorAll('.recipe-card')).toHaveLength(4);
+  });
+
+  it('搜索关键字前后有空格也能正确过滤', async () => {
+    const c = mount(makeMultiServices());
+    await flush();
+    const input = c.querySelector('#recipe-search');
+    input.value = '  蛋  ';
+    input.dispatchEvent(new Event('input'));
+    await flush();
+    expect(c.querySelectorAll('.recipe-card')).toHaveLength(3);
+  });
+});

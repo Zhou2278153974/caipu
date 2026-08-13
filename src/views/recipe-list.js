@@ -40,34 +40,11 @@ export function renderRecipeListView(container, services = {}) {
   }
 
   // ============ 列表 ============
-  async function renderList() {
-    container.innerHTML = `
-      <div class="list-header">
-        <h2 class="section-title">我的菜谱</h2>
-        <button id="btn-add-recipe" class="btn btn-primary" type="button">+ 新增菜谱</button>
-      </div>
-      <div id="recipe-list-body" class="recipe-list-body">
-        <p class="placeholder">加载中…</p>
-      </div>
-    `;
-    container.querySelector('#btn-add-recipe').addEventListener('click', () => _onAdd());
+  let allRecipes = []; // 缓存全部菜谱，供搜索过滤使用
 
-    const $body = container.querySelector('#recipe-list-body');
-    let recipes = [];
-    try {
-      recipes = await _getAllRecipes();
-    } catch (e) {
-      $body.innerHTML = `<div class="status-box status-error">读取菜谱失败：${escapeText(e.message)}</div>`;
-      return;
-    }
+  function renderRecipeCards($body, recipes) {
     if (recipes.length === 0) {
-      $body.innerHTML = `
-        <div class="empty-state">
-          <p>还没有保存任何菜谱。</p>
-          <button id="btn-empty-add" class="btn btn-primary" type="button">+ 新增第一条菜谱</button>
-        </div>
-      `;
-      $body.querySelector('#btn-empty-add').addEventListener('click', () => _onAdd());
+      $body.innerHTML = `<p class="placeholder">没有匹配的菜谱。</p>`;
       return;
     }
     $body.innerHTML = recipes
@@ -93,6 +70,51 @@ export function renderRecipeListView(container, services = {}) {
           open();
         }
       });
+    });
+  }
+
+  async function renderList() {
+    container.innerHTML = `
+      <div class="list-header">
+        <h2 class="section-title">我的菜谱</h2>
+        <input id="recipe-search" class="recipe-search" type="text" placeholder="搜索菜名…" autocomplete="off" />
+        <button id="btn-add-recipe" class="btn btn-primary" type="button">+ 新增菜谱</button>
+      </div>
+      <div id="recipe-list-body" class="recipe-list-body">
+        <p class="placeholder">加载中…</p>
+      </div>
+    `;
+    container.querySelector('#btn-add-recipe').addEventListener('click', () => _onAdd());
+
+    const $body = container.querySelector('#recipe-list-body');
+    try {
+      allRecipes = await _getAllRecipes();
+    } catch (e) {
+      $body.innerHTML = `<div class="status-box status-error">读取菜谱失败：${escapeText(e.message)}</div>`;
+      return;
+    }
+    if (allRecipes.length === 0) {
+      $body.innerHTML = `
+        <div class="empty-state">
+          <p>还没有保存任何菜谱。</p>
+          <button id="btn-empty-add" class="btn btn-primary" type="button">+ 新增第一条菜谱</button>
+        </div>
+      `;
+      $body.querySelector('#btn-empty-add').addEventListener('click', () => _onAdd());
+      return;
+    }
+    renderRecipeCards($body, allRecipes);
+
+    // 搜索框：输入时实时过滤菜名（大小写不敏感、模糊包含）
+    const $search = container.querySelector('#recipe-search');
+    $search.addEventListener('input', () => {
+      const kw = $search.value.trim().toLowerCase();
+      if (!kw) {
+        renderRecipeCards($body, allRecipes);
+        return;
+      }
+      const filtered = allRecipes.filter((r) => (r.name || '').toLowerCase().includes(kw));
+      renderRecipeCards($body, filtered);
     });
   }
 
