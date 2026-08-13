@@ -116,37 +116,101 @@ body {
   letter-spacing: 0.12em;
 }
 
-/* 导航：抽屉式 / 标签式（参考 inline-drawer + 下划线） */
-.app-nav {
-  display: flex;
-  gap: 2px;
-}
-
-.nav-btn {
-  border: none;
-  background: transparent;
-  padding: 6px 18px;
-  border-radius: 0;
-  cursor: pointer;
-  font-size: calc(14px * var(--font-scale));
-  font-family: var(--font-ui);
-  color: var(--text-sub);
-  transition: color 0.2s, border-color 0.2s, background 0.2s;
-  border-bottom: 2px solid transparent;
+/* 导航：下拉按钮 + 弹出菜单 */
+.nav-dropdown {
   position: relative;
 }
 
-.nav-btn:hover {
+.nav-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--box-1);
   color: var(--text-main);
-  border-bottom-color: color-mix(in srgb, var(--accent-purple) 60%, transparent);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: calc(14px * var(--font-scale));
+  transition: border-color 0.15s, background 0.15s;
 }
 
-.nav-btn.active {
+.nav-toggle:hover {
+  border-color: var(--accent-purple);
+  background: color-mix(in srgb, var(--box-1) 88%, var(--text-main));
+}
+
+.nav-toggle.open {
+  border-color: var(--accent-purple);
+  background: color-mix(in srgb, var(--box-1) 80%, var(--accent-purple) 20%);
+}
+
+.nav-toggle-label {
+  font-weight: 500;
+}
+
+.nav-toggle-caret {
+  font-size: calc(11px * var(--font-scale));
+  color: var(--text-sub);
+  transition: transform 0.2s, color 0.2s;
+}
+
+.nav-toggle.open .nav-toggle-caret {
   color: var(--accent-pink);
-  /* 参考 inline-drawer 三段式渐变左边框 → 转成下边线使用 */
-  border-bottom: 2px solid;
-  border-image: var(--gradient-main) 1;
+  transform: rotate(180deg);
+}
+
+.nav-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 130px;
+  background: var(--box-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px;
+  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.nav-menu[hidden] {
+  display: none;
+}
+
+.nav-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: calc(14px * var(--font-scale));
+  border-radius: var(--radius-sm);
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-menu-item:hover {
+  background: var(--box-1);
+  color: var(--accent-pink);
+}
+
+.nav-menu-item.active {
+  color: var(--accent-pink);
   font-weight: 600;
+  border-left: 3px solid;
+  border-image: var(--gradient-main) 1;
+  padding-left: 9px;
+}
+
+.nav-menu-icon {
+  font-size: calc(15px * var(--font-scale));
+  flex-shrink: 0;
 }
 
 .app-content {
@@ -525,6 +589,19 @@ label {
   border-bottom: none;
 }
 
+/* 标题后灰色菜谱数量：不显眼 */
+.recipe-count {
+  color: var(--text-mute);
+  font-weight: normal;
+  font-size: calc(12px * var(--font-scale));
+  margin-left: 6px;
+  -webkit-text-fill-color: var(--text-mute);
+  background: none !important;
+  background-clip: initial !important;
+  -webkit-background-clip: initial !important;
+  letter-spacing: normal;
+}
+
 /* 搜索框：和按钮等宽（与 +新增菜谱 按钮宽度匹配） */
 .recipe-search {
   flex: 0 0 auto;
@@ -553,6 +630,60 @@ label {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* ===== 分页 ===== */
+.pagination {
+  margin-top: 18px;
+  padding: 10px 14px;
+  background: var(--box-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--text-sub);
+}
+
+.pagination-info {
+  color: var(--text-mute);
+  font-style: italic;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pagination-pager {
+  margin: 0 4px;
+  color: var(--text-sub);
+}
+
+.pagination-pager strong {
+  color: var(--accent-pink);
+  font-weight: 600;
+  background: var(--gradient-main);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.pagination .btn-mini {
+  padding: 4px 10px;
+  font-size: calc(12px * var(--font-scale));
+  background: var(--box-1);
+}
+
+.pagination .btn-mini:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: var(--border);
 }
 
 .empty-state {
@@ -782,4 +913,441 @@ label {
 
 ::-webkit-scrollbar-thumb:hover {
   background: color-mix(in srgb, var(--accent-pink) 60%, var(--accent-purple) 40%);
+}
+
+/* ===== 今日推荐 ===== */
+.recommend-view .sub-nav {
+  display: flex;
+  gap: 8px;
+}
+
+.nutrition-note {
+  background: var(--box-1);
+  border: 1px solid color-mix(in srgb, var(--accent-purple) 40%, var(--border));
+  border-left: 3px solid;
+  border-image: var(--gradient-main) 1;
+  border-radius: var(--radius);
+  padding: 10px 15px;
+  font-size: calc(13px * var(--font-scale));
+  color: var(--text-main);
+  font-style: italic;
+  margin-bottom: 18px;
+}
+
+/* ===== 三餐折叠面板 ===== */
+.meals-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.meal-accordion-item {
+  background: var(--box-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* ⚠ 不能用 overflow:hidden — 会导致内部 summary 的 position:sticky 完全失效
+     原因：sticky 元素的祖先只要有 overflow 非 visible，就被限制在该祖先的滚动容器里
+     现在圆角由 border-radius + 内部元素边界自己控制，不再裁剪 */
+  position: relative;
+  isolation: isolate;
+}
+
+.meal-accordion-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--gradient-main);
+  opacity: 0.85;
+}
+
+.meal-accordion-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  transition: background 0.15s;
+}
+
+/* 展开时，summary 顶部悬浮（sticky），紧贴 app-header 下边缘
+   - --app-header-height 由 recommend.js 页面加载时动态测量写入（精确值）
+   - fallback 62px = 14px padding*2 + 约32px内容 + 1px 底边 + 冗余
+   - 悬浮时自带左侧渐变竖条（因为父 details 去了 overflow:hidden，为保持完整视觉效果） */
+.meal-accordion-item[open] > .meal-accordion-header {
+  position: sticky;
+  top: var(--app-header-height, 62px);
+  z-index: 9;
+  background: var(--box-2);
+  border-bottom: 1px solid var(--border-light);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+  border-top-left-radius: var(--radius);
+  border-top-right-radius: var(--radius);
+}
+
+/* 悬浮时 summary 左侧画一条和 details::before 对齐的渐变竖条，
+   因为悬浮时 summary 脱离 details 区域，需要自己复现这条装饰线 */
+.meal-accordion-item[open] > .meal-accordion-header::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: -1px; /* 覆盖底部边框 */
+  width: 3px;
+  background: var(--gradient-main);
+  opacity: 0.85;
+  border-top-left-radius: var(--radius);
+}
+
+/* 折叠面板 body 区域控制圆角溢出（保持底部圆角不被破坏） */
+.meal-accordion-body {
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-bottom-left-radius: var(--radius);
+  border-bottom-right-radius: var(--radius);
+  overflow: hidden;
+}
+
+.meal-accordion-header::-webkit-details-marker {
+  display: none;
+}
+
+.meal-accordion-header:hover {
+  background: var(--box-1);
+}
+
+.meal-accordion-icon {
+  font-size: calc(22px * var(--font-scale));
+}
+
+.meal-accordion-title {
+  font-size: calc(18px * var(--font-scale));
+  font-weight: 700;
+  background: var(--gradient-main);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  white-space: nowrap;
+}
+
+.meal-accordion-summary {
+  margin-left: 6px;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--text-sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.meal-accordion-caret {
+  font-size: calc(14px * var(--font-scale));
+  color: var(--text-sub);
+  transition: transform 0.2s;
+}
+
+.meal-accordion-item[open] .meal-accordion-caret {
+  transform: rotate(180deg);
+}
+
+/* 旧的重复声明，已合并到上方 1007 行附近，这里直接删去占位避免重复 */
+
+/* ===== 单道菜卡片 ===== */
+.dish-card {
+  background: var(--box-1);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  padding: 14px 16px 15px;
+  position: relative;
+}
+
+.dish-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.dish-recipe-name {
+  font-size: calc(16px * var(--font-scale));
+  font-weight: 700;
+  color: var(--text-main);
+  flex: 1;
+  min-width: 0;
+}
+
+.dish-head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.meals-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.meal-card {
+  background: var(--box-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 15px 18px 16px;
+  position: relative;
+}
+
+.meal-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: var(--radius) 0 0 var(--radius);
+  background: var(--gradient-main);
+  opacity: 0.85;
+}
+
+.meal-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.meal-icon {
+  font-size: calc(20px * var(--font-scale));
+}
+
+.meal-label {
+  margin: 0;
+  font-size: calc(15px * var(--font-scale) + 1px);
+  font-weight: 600;
+  background: var(--gradient-main);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.meal-head-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meal-emoji {
+  font-size: calc(20px * var(--font-scale));
+}
+
+.meal-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: calc(11px * var(--font-scale));
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--box-1);
+  border: 1px solid var(--border);
+  color: var(--text-sub);
+}
+
+.meal-badge-lib {
+  color: var(--accent-success);
+  border-color: color-mix(in srgb, var(--accent-success) 40%, var(--border));
+}
+
+.meal-badge-ai {
+  color: var(--accent-purple);
+  border-color: color-mix(in srgb, var(--accent-purple) 40%, var(--border));
+}
+
+.meal-recipe-name {
+  font-size: calc(18px * var(--font-scale) + 1px);
+  font-weight: 700;
+  margin: 4px 0 4px;
+  color: var(--text-main);
+}
+
+.meal-recipe-intro {
+  color: var(--text-sub);
+  font-style: italic;
+  font-size: calc(13px * var(--font-scale));
+  margin-bottom: 12px;
+}
+
+.meal-subtitle {
+  font-size: calc(13px * var(--font-scale));
+  margin: 14px 0 6px;
+  color: var(--accent-pink);
+  font-weight: 600;
+  padding-bottom: 3px;
+  border-bottom: 1px dashed var(--box-1);
+}
+
+.meal-subtitle::before {
+  content: "✦";
+  background: var(--gradient-main);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-right: 5px;
+}
+
+.meal-ingredients {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--box-1);
+}
+
+.meal-ingredients li {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: calc(13px * var(--font-scale));
+}
+
+.meal-ingredients li:last-child {
+  border-bottom: none;
+}
+
+.meal-ingredients li:nth-child(even) {
+  background: var(--box-2);
+}
+
+.meal-ingredients .ing-amount {
+  color: var(--accent-purple);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.meal-steps {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+  font-size: calc(13px * var(--font-scale));
+  line-height: 1.85;
+}
+
+.meal-steps li {
+  margin-bottom: 4px;
+  position: relative;
+}
+
+.meal-steps .step-idx {
+  color: var(--accent-pink);
+  font-weight: 600;
+  margin-right: 2px;
+}
+
+/* (之前用 <ol> 时留的 ::marker 隐藏规则现在不需要了，彻底用 list-style:none 去编号) */
+
+.meal-tips {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--box-1);
+}
+
+.meal-tips summary {
+  padding: 6px 11px;
+  cursor: pointer;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--accent-warning);
+  font-weight: 500;
+  user-select: none;
+}
+
+.meal-tips-body {
+  padding: 0 11px 8px;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--text-sub);
+  font-style: italic;
+  border-top: 1px solid var(--border-light);
+  padding-top: 7px;
+}
+
+.meal-actions {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  border-top: 1px solid var(--border-light);
+  padding-top: 12px;
+}
+
+/* ===== 弹框（API 配置提示） ===== */
+.recommend-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: modal-fade-in 0.2s ease;
+}
+
+@keyframes modal-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.recommend-modal {
+  background: var(--box-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 24px 20px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  animation: modal-slide-up 0.25s ease;
+}
+
+@keyframes modal-slide-up {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.recommend-modal-icon {
+  font-size: 42px;
+  margin-bottom: 12px;
+}
+
+.recommend-modal-title {
+  font-size: calc(18px * var(--font-scale) + 1px);
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 10px;
+  background: var(--gradient-main);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.recommend-modal-desc {
+  font-size: calc(13px * var(--font-scale));
+  color: var(--text-sub);
+  line-height: 1.7;
+  margin-bottom: 20px;
+}
+
+.recommend-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
 }

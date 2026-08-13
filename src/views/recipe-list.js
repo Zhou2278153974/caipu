@@ -41,6 +41,14 @@ export function renderRecipeListView(container, services = {}) {
 
   // ============ 列表 ============
   let allRecipes = []; // 缓存全部菜谱，供搜索过滤使用
+  const PAGE_SIZE = 10;
+  let currentPage = 1;
+
+  function getFilteredRecipes(keyword) {
+    const kw = (keyword || '').trim().toLowerCase();
+    if (!kw) return allRecipes.slice();
+    return allRecipes.filter((r) => (r.name || '').toLowerCase().includes(kw));
+  }
 
   function renderRecipeCards($body, recipes) {
     if (recipes.length === 0) {
@@ -73,26 +81,89 @@ export function renderRecipeListView(container, services = {}) {
     });
   }
 
+  function renderPagination($container, total) {
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (currentPage > pages) currentPage = pages;
+    if (currentPage < 1) currentPage = 1;
+    const page = currentPage;
+    const startIdx = (page - 1) * PAGE_SIZE;
+    const endIdx = Math.min(startIdx + PAGE_SIZE, total);
+    const startNum = total === 0 ? 0 : startIdx + 1;
+    const canPrev = page > 1;
+    const canNext = page < pages;
+
+    const html = `
+      <div class="pagination" data-total="${total}" data-page="${page}" data-pages="${pages}">
+        <span class="pagination-info">第 ${startNum}-${endIdx} 条 / 共 ${total} 条</span>
+        <div class="pagination-controls">
+          <button class="btn btn-mini" type="button" data-act="first" ${canPrev ? '' : 'disabled'}>« 首页</button>
+          <button class="btn btn-mini" type="button" data-act="prev" ${canPrev ? '' : 'disabled'}>‹ 上一页</button>
+          <span class="pagination-pager">第 <strong>${page}</strong> / ${pages} 页</span>
+          <button class="btn btn-mini" type="button" data-act="next" ${canNext ? '' : 'disabled'}>下一页 ›</button>
+          <button class="btn btn-mini" type="button" data-act="last" ${canNext ? '' : 'disabled'}>末页 »</button>
+        </div>
+      </div>
+    `;
+    const $wrap = document.createElement('div');
+    $wrap.innerHTML = html;
+    const $el = $wrap.firstElementChild;
+    $el.querySelectorAll('button[data-act]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const act = btn.dataset.act;
+        if (act === 'first') currentPage = 1;
+        else if (act === 'prev') currentPage = Math.max(1, page - 1);
+        else if (act === 'next') currentPage = Math.min(pages, page + 1);
+        else if (act === 'last') currentPage = pages;
+        refreshCurrentView();
+      });
+    });
+    $container.appendChild($el);
+  }
+
+  let $currentSearch = null;
+  function getCurrentKeyword() {
+    return $currentSearch ? $currentSearch.value : '';
+  }
+
+  function refreshCurrentView() {
+    const $body = container.querySelector('#recipe-list-body');
+    const $pagWrap = container.querySelector('#pagination-wrap');
+    if (!$body || !$pagWrap) return;
+    const filtered = getFilteredRecipes(getCurrentKeyword());
+    const total = filtered.length;
+    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    if (currentPage > pages) currentPage = pages;
+    const startIdx = (currentPage - 1) * PAGE_SIZE;
+    const paged = filtered.slice(startIdx, startIdx + PAGE_SIZE);
+    renderRecipeCards($body, paged);
+    $pagWrap.innerHTML = '';
+    renderPagination($pagWrap, total);
+  }
+
   async function renderList() {
     container.innerHTML = `
       <div class="list-header">
-        <h2 class="section-title">我的菜谱</h2>
+        <h2 class="section-title">我的菜谱<span class="recipe-count"></span></h2>
         <input id="recipe-search" class="recipe-search" type="text" placeholder="搜索菜名…" autocomplete="off" />
         <button id="btn-add-recipe" class="btn btn-primary" type="button">+ 新增菜谱</button>
       </div>
       <div id="recipe-list-body" class="recipe-list-body">
         <p class="placeholder">加载中…</p>
       </div>
+      <div id="pagination-wrap"></div>
     `;
     container.querySelector('#btn-add-recipe').addEventListener('click', () => _onAdd());
 
+    const $count = container.querySelector('.recipe-count');
     const $body = container.querySelector('#recipe-list-body');
+    const $pagWrap = container.querySelector('#pagination-wrap');
     try {
       allRecipes = await _getAllRecipes();
     } catch (e) {
       $body.innerHTML = `<div class="status-box status-error">读取菜谱失败：${escapeText(e.message)}</div>`;
       return;
     }
+    $count.textContent = `（${allRecipes.length}）`;
     if (allRecipes.length === 0) {
       $body.innerHTML = `
         <div class="empty-state">
@@ -103,18 +174,17 @@ export function renderRecipeListView(container, services = {}) {
       $body.querySelector('#btn-empty-add').addEventListener('click', () => _onAdd());
       return;
     }
-    renderRecipeCards($body, allRecipes);
+    currentPage = 1;
+    const total = allRecipes.length;
+    const paged = allRecipes.slice(0, PAGE_SIZE);
+    renderRecipeCards($body, paged);
+    renderPagination($pagWrap, total);
 
-    // 搜索框：输入时实时过滤菜名（大小写不敏感、模糊包含）
-    const $search = container.querySelector('#recipe-search');
-    $search.addEventListener('input', () => {
-      const kw = $search.value.trim().toLowerCase();
-      if (!kw) {
-        renderRecipeCards($body, allRecipes);
-        return;
-      }
-      const filtered = allRecipes.filter((r) => (r.name || '').toLowerCase().includes(kw));
-      renderRecipeCards($body, filtered);
+    // 搜索框：输入时实时过滤菜名，重置到第1页
+    $currentSearch = container.querySelector('#recipe-search');
+    $currentSearch.addEventListener('input', () => {
+      currentPage = 1;
+      refreshCurrentView();
     });
   }
 

@@ -9,9 +9,10 @@
 //   - DB 单例，首次访问时自动打开
 
 const DB_NAME = 'personal-recipe-app';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const RECIPES_STORE = 'recipes';
 const SETTINGS_STORE = 'settings';
+const RECOMMENDATIONS_STORE = 'recommendations';
 const SETTINGS_KEY_API_CONFIG = 'api_config';
 
 let dbPromise = null;
@@ -31,6 +32,10 @@ export function getDb() {
         }
         if (!db.objectStoreNames.contains(SETTINGS_STORE)) {
           db.createObjectStore(SETTINGS_STORE, { keyPath: 'key' });
+        }
+        if (!db.objectStoreNames.contains(RECOMMENDATIONS_STORE)) {
+          // 按日期存：keyPath = date (YYYY-MM-DD)
+          db.createObjectStore(RECOMMENDATIONS_STORE, { keyPath: 'date' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -146,4 +151,45 @@ export async function saveApiConfig(config) {
 export async function clearAllSettings() {
   const db = await getDb();
   await reqToPromise(tx(db, SETTINGS_STORE, 'readwrite').clear());
+}
+
+// ============ 今日推荐 ============
+
+/** 获取今日日期字符串（本地时区，YYYY-MM-DD） */
+export function getTodayKey(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * 获取指定日期的推荐缓存
+ * @param {string} dateKey 日期字符串 YYYY-MM-DD
+ * @returns {Promise<object|null>}
+ */
+export async function getRecommendation(dateKey) {
+  const db = await getDb();
+  const record = await reqToPromise(
+    tx(db, RECOMMENDATIONS_STORE, 'readonly').get(dateKey)
+  );
+  return record ?? null;
+}
+
+/**
+ * 保存指定日期的推荐结果（覆盖式）
+ * @param {string} dateKey
+ * @param {object} data {generated_at, nutrition_note, meals: {breakfast, lunch, dinner}}
+ */
+export async function saveRecommendation(dateKey, data) {
+  const db = await getDb();
+  const record = { date: dateKey, ...data };
+  await reqToPromise(tx(db, RECOMMENDATIONS_STORE, 'readwrite').put(record));
+  return record;
+}
+
+/** 清空所有推荐缓存 */
+export async function clearAllRecommendations() {
+  const db = await getDb();
+  await reqToPromise(tx(db, RECOMMENDATIONS_STORE, 'readwrite').clear());
 }
