@@ -110,7 +110,7 @@ export function mountApp(rootEl) {
     wrap.className = 'app-shell';
     wrap.innerHTML = `
       <header class="app-header">
-        <h1 class="app-title">我的菜谱</h1>
+        <h1 class="app-title">吃什么</h1>
         <div class="nav-dropdown">
           <button id="nav-toggle" class="nav-toggle" type="button" aria-haspopup="true" aria-expanded="false">
             <span class="nav-toggle-label">${VIEWS[currentView].label}</span>

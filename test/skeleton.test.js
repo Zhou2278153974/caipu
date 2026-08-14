@@ -20,7 +20,7 @@ describe('阶段0：应用骨架', () => {
 
   it('挂载后渲染标题与下拉按钮（不再有两个并排 nav-btn）', () => {
     mountApp(root);
-    expect(root.querySelector('.app-title').textContent).toBe('我的菜谱');
+    expect(root.querySelector('.app-title').textContent).toBe('吃什么');
     // 下拉按钮存在
     expect(root.querySelector('#nav-toggle')).toBeTruthy();
     // 菜单项有三个：菜谱 / 今日推荐 / 设置

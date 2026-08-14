@@ -143,9 +143,9 @@ export function renderRecipeListView(container, services = {}) {
   async function renderList() {
     container.innerHTML = `
       <div class="list-header">
-        <h2 class="section-title">我的菜谱<span class="recipe-count"></span></h2>
+        <h2 class="section-title">菜谱<span class="recipe-count"></span></h2>
         <input id="recipe-search" class="recipe-search" type="text" placeholder="搜索菜名…" autocomplete="off" />
-        <button id="btn-add-recipe" class="btn btn-primary" type="button">+ 新增菜谱</button>
+        <button id="btn-add-recipe" class="btn btn-primary" type="button">+ 新增</button>
       </div>
       <div id="recipe-list-body" class="recipe-list-body">
         <p class="placeholder">加载中…</p>
@@ -168,7 +168,7 @@ export function renderRecipeListView(container, services = {}) {
       $body.innerHTML = `
         <div class="empty-state">
           <p>还没有保存任何菜谱。</p>
-          <button id="btn-empty-add" class="btn btn-primary" type="button">+ 新增第一条菜谱</button>
+          <button id="btn-empty-add" class="btn btn-primary" type="button">+ 新增第一条</button>
         </div>
       `;
       $body.querySelector('#btn-empty-add').addEventListener('click', () => _onAdd());
