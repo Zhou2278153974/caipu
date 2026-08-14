@@ -1,7 +1,9 @@
 // 本地存储层：基于 IndexedDB 的封装
-// 两个 store：
+// 四个 store：
 //   - recipes：菜谱（自增主键 id）
 //   - settings：键值对（keyPath = key），其中 key='api_config' 存 API 配置
+//   - recommendations：按日期存今日推荐结果（keyPath = date，YYYY-MM-DD）
+//   - preferences：用户饮食偏好标签（keyPath = id，uuid；value = 标签文字）
 //
 // 设计原则：
 //   - 所有方法返回 Promise
@@ -9,11 +11,16 @@
 //   - DB 单例，首次访问时自动打开
 
 const DB_NAME = 'personal-recipe-app';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const RECIPES_STORE = 'recipes';
 const SETTINGS_STORE = 'settings';
 const RECOMMENDATIONS_STORE = 'recommendations';
+const PREFERENCES_STORE = 'preferences';
 const SETTINGS_KEY_API_CONFIG = 'api_config';
+const SETTINGS_KEY_THEME = 'theme';
+export const THEME_DARK = 'dark';
+export const THEME_LIGHT = 'light';
+export const DEFAULT_THEME = THEME_DARK;
 
 let dbPromise = null;
 
@@ -36,6 +43,10 @@ export function getDb() {
         if (!db.objectStoreNames.contains(RECOMMENDATIONS_STORE)) {
           // 按日期存：keyPath = date (YYYY-MM-DD)
           db.createObjectStore(RECOMMENDATIONS_STORE, { keyPath: 'date' });
+        }
+        if (!db.objectStoreNames.contains(PREFERENCES_STORE)) {
+          // 用户偏好标签：id（字符串uuid）、value（用户输入的偏好文字）、created_at
+          db.createObjectStore(PREFERENCES_STORE, { keyPath: 'id' });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -147,6 +158,27 @@ export async function saveApiConfig(config) {
   return record.value;
 }
 
+/** 读取主题，未配置时返回默认深色主题 */
+export async function getTheme() {
+  const db = await getDb();
+  const record = await reqToPromise(
+    tx(db, SETTINGS_STORE, 'readonly').get(SETTINGS_KEY_THEME)
+  );
+  const val = record?.value;
+  if (val === THEME_DARK || val === THEME_LIGHT) return val;
+  return DEFAULT_THEME;
+}
+
+/** 保存主题，非法值抛出错误 */
+export async function saveTheme(theme) {
+  if (theme !== THEME_DARK && theme !== THEME_LIGHT) {
+    throw new Error(`不支持的主题：${String(theme)}`);
+  }
+  const db = await getDb();
+  await reqToPromise(tx(db, SETTINGS_STORE, 'readwrite').put({ key: SETTINGS_KEY_THEME, value: theme }));
+  return theme;
+}
+
 /** 清空所有设置 */
 export async function clearAllSettings() {
   const db = await getDb();
@@ -192,4 +224,104 @@ export async function saveRecommendation(dateKey, data) {
 export async function clearAllRecommendations() {
   const db = await getDb();
   await reqToPromise(tx(db, RECOMMENDATIONS_STORE, 'readwrite').clear());
+}
+
+// ============ 用户饮食偏好 ============
+
+/** 生成简单唯一ID（无需严格uuid，够用即可） */
+function uid() {
+  return (
+    'p_' +
+    Date.now().toString(36) +
+    '_' +
+    Math.random().toString(36).slice(2, 8)
+  );
+}
+
+/**
+ * 新增一个偏好标签
+ * @param {string} value 用户输入的偏好文字（如"不吃辣"），trim后非空才能存入
+ * @returns {Promise<{id:string, value:string, created_at:number}>} 保存后的偏好对象
+ */
+export async function addPreference(valueRaw) {
+  const value = String(valueRaw || '').trim();
+  if (!value) throw new Error('偏好内容不能为空');
+  const db = await getDb();
+  const record = { id: uid(), value, created_at: Date.now() };
+  await reqToPromise(tx(db, PREFERENCES_STORE, 'readwrite').add(record));
+  return record;
+}
+
+/**
+ * 获取全部偏好标签，按 created_at 升序（先加的在前）
+ * @returns {Promise<Array<{id:string, value:string, created_at:number}>>}
+ */
+export async function getAllPreferences() {
+  const db = await getDb();
+  const all = await reqToPromise(tx(db, PREFERENCES_STORE, 'readonly').getAll());
+  return all.sort((a, b) => a.created_at - b.created_at);
+}
+
+/** 按 id 删除单个偏好，返回是否删除成功 */
+export async function removePreference(id) {
+  if (!id) return false;
+  const db = await getDb();
+  const existing = await reqToPromise(tx(db, PREFERENCES_STORE, 'readonly').get(id));
+  if (!existing) return false;
+  await reqToPromise(tx(db, PREFERENCES_STORE, 'readwrite').delete(id));
+  return true;
+}
+
+/** 清空全部偏好 */
+export async function clearAllPreferences() {
+  const db = await getDb();
+  await reqToPromise(tx(db, PREFERENCES_STORE, 'readwrite').clear());
+}
+
+// ============ 分组批量清除（数据管理专用） ============
+
+/**
+ * ① 清除「除我的菜谱」以外的所有数据：
+ *   - settings（含 API 配置）
+ *   - preferences（偏好标签）
+ *   - recommendations（今日推荐缓存）
+ * recipes 一条不动
+ */
+export async function clearDataExceptRecipes() {
+  const db = await getDb();
+  const stores = [SETTINGS_STORE, PREFERENCES_STORE, RECOMMENDATIONS_STORE];
+  const transaction = db.transaction(stores, 'readwrite');
+  await Promise.all(
+    stores.map((name) => reqToPromise(transaction.objectStore(name).clear()))
+  );
+}
+
+/**
+ * ② 仅清除菜谱数据（recipes store），其他（API、偏好、推荐缓存）都不动
+ */
+export async function clearRecipeDataOnly() {
+  const db = await getDb();
+  await reqToPromise(tx(db, RECIPES_STORE, 'readwrite').clear());
+}
+
+/**
+ * 获取各模块当前数据量，供数据管理页展示文案用
+ * @returns {Promise<{recipes:number, preferences:number, recommendations:number, hasApiConfig:boolean}>}
+ */
+export async function getDataCounts() {
+  const db = await getDb();
+  const stores = [RECIPES_STORE, PREFERENCES_STORE, RECOMMENDATIONS_STORE, SETTINGS_STORE];
+  const txn = db.transaction(stores, 'readonly');
+  const [recipes, preferences, recommendations, apiCfg] = await Promise.all([
+    reqToPromise(txn.objectStore(RECIPES_STORE).count()),
+    reqToPromise(txn.objectStore(PREFERENCES_STORE).count()),
+    reqToPromise(txn.objectStore(RECOMMENDATIONS_STORE).count()),
+    reqToPromise(txn.objectStore(SETTINGS_STORE).get(SETTINGS_KEY_API_CONFIG)),
+  ]);
+  return {
+    recipes: Number(recipes) || 0,
+    preferences: Number(preferences) || 0,
+    recommendations: Number(recommendations) || 0,
+    hasApiConfig: !!(apiCfg && apiCfg.value && (apiCfg.value.api_key || apiCfg.value.base_url || apiCfg.value.model)),
+  };
 }

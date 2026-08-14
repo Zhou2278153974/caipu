@@ -55,7 +55,9 @@ export function renderRecommendView(container, services = {}) {
       }
       const cached = await _getRecommendation(todayKey);
       if (cached && cached.meals && cached.meals.breakfast && cached.meals.lunch && cached.meals.dinner
-        && cached.meals.breakfast.dishes && cached.meals.lunch.dishes && cached.meals.dinner.dishes) {
+        && Array.isArray(cached.meals.breakfast.dishes)
+        && Array.isArray(cached.meals.lunch.dishes)
+        && Array.isArray(cached.meals.dinner.dishes)) {
         renderResult(cached);
         return;
       }
@@ -96,7 +98,7 @@ export function renderRecommendView(container, services = {}) {
 
     $confirm.addEventListener('click', () => {
       overlay.remove();
-      services.goToView?.('settings');
+      services.goToView?.('settings', { subpage: 'api' });
     });
     $cancel.addEventListener('click', () => {
       overlay.remove();
@@ -219,6 +221,15 @@ export function renderRecommendView(container, services = {}) {
           }
         },
       });
+      // 防御性检查：确保 result 结构完整再保存和渲染
+      const hasValidMeals = result
+        && result.meals
+        && result.meals.breakfast && Array.isArray(result.meals.breakfast.dishes)
+        && result.meals.lunch && Array.isArray(result.meals.lunch.dishes)
+        && result.meals.dinner && Array.isArray(result.meals.dinner.dishes);
+      if (!hasValidMeals) {
+        throw new Error('AI 返回的推荐数据结构不完整，请重试');
+      }
       // 缓存到今日
       await _saveRecommendation(todayKey, {
         generated_at: result.generated_at,
@@ -294,156 +305,240 @@ export function renderRecommendView(container, services = {}) {
 
   // ============ 结果展示 ============
   function renderResult(data) {
-    // 营养点评
-    const $note = container.querySelector('#recommend-nutrition');
-    if ($note) {
-      if (data.nutrition_note) {
-        $note.style.display = '';
-        $note.textContent = data.nutrition_note;
-      } else {
-        $note.style.display = 'none';
+    try {
+      const safeData = data && typeof data === 'object' ? data : {};
+      const safeMeals = (safeData.meals && typeof safeData.meals === 'object') ? safeData.meals : {};
+
+      // 营养点评
+      const $note = container.querySelector('#recommend-nutrition');
+      if ($note) {
+        if (safeData.nutrition_note) {
+          $note.style.display = '';
+          $note.textContent = safeData.nutrition_note;
+        } else {
+          $note.style.display = 'none';
+        }
       }
-    }
 
-    // 三餐折叠面板（默认全部收起，用户需要哪个自己点开）
-    const slots = ['breakfast', 'lunch', 'dinner'];
-    const mealsHtml = slots
-      .map((slot) => renderMealSection(slot, data.meals[slot], false))
-      .join('');
-    setMain(`<div class="meals-accordion">${mealsHtml}</div>`);
+      // 三餐折叠面板（默认全部收起，用户需要哪个自己点开）
+      const slots = ['breakfast', 'lunch', 'dinner'];
+      const mealsHtml = slots
+        .map((slot) => renderMealSection(slot, safeMeals[slot], false))
+        .join('');
+      setMain(`<div class="meals-accordion">${mealsHtml}</div>`);
 
-    // 绑定每道菜的收藏按钮
-    slots.forEach((slot) => {
-      const meal = data.meals[slot];
-      if (!meal || !Array.isArray(meal.dishes)) return;
-      meal.dishes.forEach((dish, idx) => {
-        const $btn = container.querySelector(`#save-dish-${slot}-${idx}`);
-        if (!$btn) return;
-        $btn.addEventListener('click', async () => {
-          if (!dish || !dish.recipe || !dish.recipe.name) return;
-          if (dish.from_library) {
-            setStatus('这道菜已经在你的菜谱库里啦～', 'info');
-            return;
-          }
-          $btn.disabled = true;
-          $btn.textContent = '收藏中…';
-          try {
-            const saved = await _createRecipe({ ...dish.recipe });
-            dish.from_library = true;
-            dish.recipe_id = saved.id;
-            $btn.textContent = '已收藏 ✓';
-            $btn.classList.remove('btn-primary');
-            setStatus(`已收藏「${saved.name}」到我的菜谱`, 'success');
-          } catch (e) {
-            $btn.disabled = false;
-            $btn.textContent = '收藏到我的菜谱';
-            setStatus(`收藏失败：${e.message}`, 'error');
-          }
+      // 绑定每道菜的收藏按钮
+      slots.forEach((slot) => {
+        const meal = safeMeals[slot];
+        if (!meal || !Array.isArray(meal.dishes)) return;
+        meal.dishes.forEach((dish, idx) => {
+          const $btn = container.querySelector(`#save-dish-${slot}-${idx}`);
+          if (!$btn) return;
+          $btn.addEventListener('click', async () => {
+            if (!dish || !dish.recipe || !dish.recipe.name) return;
+            if (dish.from_library) {
+              setStatus('这道菜已经在你的菜谱库里啦～', 'info');
+              return;
+            }
+            $btn.disabled = true;
+            $btn.textContent = '收藏中…';
+            try {
+              const saved = await _createRecipe({ ...dish.recipe });
+              dish.from_library = true;
+              dish.recipe_id = saved.id;
+              $btn.textContent = '已收藏 ✓';
+              $btn.classList.remove('btn-primary');
+              setStatus(`已收藏「${saved.name}」到我的菜谱`, 'success');
+            } catch (e) {
+              $btn.disabled = false;
+              $btn.textContent = '收藏到我的菜谱';
+              setStatus(`收藏失败：${e.message}`, 'error');
+            }
+          });
         });
       });
-    });
 
-    // 动作栏：换一批
-    setActions([
-      {
-        text: '换一批',
-        id: 'btn-refresh',
-        kind: 'primary',
-        onClick: async () => {
-          if (!confirm('确定要重新生成今天的推荐吗？这会覆盖当前推荐。')) return;
-          const cfg = await _getApiConfig();
-          if (!cfg.base_url || !cfg.api_key || !cfg.model) {
-            setStatus('API 配置不完整', 'error');
-            return;
-          }
-          startGenerate({ cfg });
+      // 动作栏：换一批
+      setActions([
+        {
+          text: '换一批',
+          id: 'btn-refresh',
+          kind: 'primary',
+          onClick: async () => {
+            const ok = await asyncConfirm('确定要重新生成今天的推荐吗？这会覆盖当前推荐。', '换一批提醒', '重新生成');
+            if (!ok) return;
+            const cfg = await _getApiConfig();
+            if (!cfg.base_url || !cfg.api_key || !cfg.model) {
+              setStatus('API 配置不完整', 'error');
+              return;
+            }
+            startGenerate({ cfg });
+          },
         },
-      },
-    ]);
+      ]);
+    } catch (e) {
+      console.error('renderResult error:', e);
+      setMain(`<div class="status-box status-error">推荐渲染失败：${escapeText(e.message)}</div>`);
+      setActions([]);
+      setStatus('渲染出错：' + e.message, 'error');
+    }
   }
 
   /** 渲染一餐的折叠面板（大标题 + 可展开菜谱列表） */
   function renderMealSection(slot, meal, defaultOpen) {
-    const meta = MEAL_META[slot];
-    const dishes = (meal && Array.isArray(meal.dishes)) ? meal.dishes : [];
-    const dishCount = dishes.length;
-    const openAttr = defaultOpen ? 'open' : '';
+    try {
+      const meta = MEAL_META[slot];
+      const dishes = (meal && Array.isArray(meal.dishes)) ? meal.dishes : [];
+      const dishCount = dishes.length;
+      const openAttr = defaultOpen ? 'open' : '';
 
-    // 标题栏右侧：菜品数量 + 菜名摘要
-    const dishNames = dishes.map((d) => d?.recipe?.name || '').filter(Boolean).join('、');
-    const summaryText = dishCount > 0
-      ? `${dishCount} 道菜${dishNames ? ' · ' + escapeText(dishNames) : ''}`
-      : '暂无推荐';
+      const dishNames = dishes.map((d) => d?.recipe?.name || '').filter(Boolean).join('、');
+      const summaryText = dishCount > 0
+        ? `${dishCount} 道菜${dishNames ? ' · ' + escapeText(dishNames) : ''}`
+        : '暂无推荐';
 
-    const dishesHtml = dishCount > 0
-      ? dishes.map((dish, idx) => renderDishCard(slot, dish, idx)).join('')
-      : `<div class="empty-state" style="padding:26px 10px"><p>暂无推荐</p></div>`;
+      const dishesHtml = dishCount > 0
+        ? dishes.map((dish, idx) => renderDishCard(slot, dish, idx)).join('')
+        : `<div class="empty-state" style="padding:26px 10px"><p>暂无推荐</p></div>`;
 
-    return `
-      <details class="meal-accordion-item" data-slot="${slot}" ${openAttr}>
+      return `
+        <details class="meal-accordion-item" data-slot="${slot}" ${openAttr}>
+          <summary class="meal-accordion-header">
+            <span class="meal-accordion-icon">${meta.icon}</span>
+            <span class="meal-accordion-title">${meta.label}</span>
+            <span class="meal-accordion-summary">${summaryText}</span>
+            <span class="meal-accordion-caret">▾</span>
+          </summary>
+          <div class="meal-accordion-body">
+            ${dishesHtml}
+          </div>
+        </details>
+      `;
+    } catch (e) {
+      console.error('renderMealSection error:', slot, e);
+      const meta = MEAL_META[slot];
+      return `<details class="meal-accordion-item" data-slot="${slot}">
         <summary class="meal-accordion-header">
           <span class="meal-accordion-icon">${meta.icon}</span>
           <span class="meal-accordion-title">${meta.label}</span>
-          <span class="meal-accordion-summary">${summaryText}</span>
+          <span class="meal-accordion-summary">渲染异常</span>
           <span class="meal-accordion-caret">▾</span>
         </summary>
         <div class="meal-accordion-body">
-          ${dishesHtml}
+          <div class="empty-state" style="padding:26px 10px"><p>渲染出错，请重试</p></div>
         </div>
-      </details>
-    `;
+      </details>`;
+    }
   }
 
   /** 渲染单道菜的卡片 */
   function renderDishCard(slot, dish, idx) {
-    const meta = MEAL_META[slot];
-    if (!dish || !dish.recipe || !dish.recipe.name) {
-      return `<div class="empty-state" style="padding:16px"><p>菜品数据不完整</p></div>`;
-    }
-    const r = dish.recipe;
-    const fromLib = !!dish.from_library;
-    const libBadge = fromLib
-      ? `<span class="meal-badge meal-badge-lib" title="来自你的菜谱库">📚 来自菜谱库</span>`
-      : `<span class="meal-badge meal-badge-ai" title="AI 原创搭配">✨ AI 推荐</span>`;
-    const saveBtn = fromLib
-      ? `<button class="btn" id="save-dish-${slot}-${idx}" type="button" disabled title="已在菜谱库中">已在菜谱库</button>`
-      : `<button class="btn btn-primary" id="save-dish-${slot}-${idx}" type="button">收藏到我的菜谱</button>`;
+    try {
+      const meta = MEAL_META[slot];
+      if (!dish || !dish.recipe || !dish.recipe.name) {
+        return `<div class="empty-state" style="padding:16px"><p>菜品数据不完整</p></div>`;
+      }
+      const r = dish.recipe;
+      const ingredients = Array.isArray(r.ingredients) ? r.ingredients : [];
+      const steps = Array.isArray(r.steps) ? r.steps : [];
+      const fromLib = !!dish.from_library;
+      const libBadge = fromLib
+        ? `<span class="meal-badge meal-badge-lib" title="来自你的菜谱库">📚 来自菜谱库</span>`
+        : `<span class="meal-badge meal-badge-ai" title="AI 原创搭配">✨ AI 推荐</span>`;
+      const saveBtn = fromLib
+        ? `<button class="btn" id="save-dish-${slot}-${idx}" type="button" disabled title="已在菜谱库中">已在菜谱库</button>`
+        : `<button class="btn btn-primary" id="save-dish-${slot}-${idx}" type="button">收藏到我的菜谱</button>`;
 
-    const ingHtml = r.ingredients
-      .map((i) => `<li><span>${escapeText(i.name)}</span><span class="ing-amount">${escapeText(i.amount)}</span></li>`)
-      .join('');
-    const stepsHtml = r.steps
-      .map((s, si) => `<li><span class="step-idx">${si + 1}.</span> ${escapeText(s)}</li>`)
-      .join('');
-    const tipsHtml = r.tips
-      ? `<details class="meal-tips"><summary>小贴士</summary><div class="meal-tips-body">${escapeText(r.tips)}</div></details>`
-      : '';
+      const ingHtml = ingredients
+        .map((i) => `<li><span>${escapeText(i?.name || '')}</span><span class="ing-amount">${escapeText(i?.amount || '')}</span></li>`)
+        .join('');
+      const stepsHtml = steps
+        .map((s, si) => `<li><span class="step-idx">${si + 1}.</span> ${escapeText(s)}</li>`)
+        .join('');
+      const tipsHtml = r.tips
+        ? `<details class="meal-tips"><summary>小贴士</summary><div class="meal-tips-body">${escapeText(r.tips)}</div></details>`
+        : '';
 
-    return `
-      <article class="dish-card" data-slot="${slot}" data-idx="${idx}">
-        <div class="dish-card-head">
-          <div class="dish-recipe-name">${escapeText(r.name)}</div>
-          <div class="dish-head-right">
-            ${libBadge}
-            <span class="meal-emoji">${meta.emoji}</span>
+      return `
+        <article class="dish-card" data-slot="${slot}" data-idx="${idx}">
+          <div class="dish-card-head">
+            <div class="dish-recipe-name">${escapeText(r.name)}</div>
+            <div class="dish-head-right">
+              ${libBadge}
+              <span class="meal-emoji">${meta.emoji}</span>
+            </div>
           </div>
-        </div>
-        ${r.intro ? `<div class="meal-recipe-intro">${escapeText(r.intro)}</div>` : ''}
+          ${r.intro ? `<div class="meal-recipe-intro">${escapeText(r.intro)}</div>` : ''}
 
-        <div class="meal-subtitle">食材</div>
-        <ul class="meal-ingredients">${ingHtml}</ul>
+          <div class="meal-subtitle">食材</div>
+          <ul class="meal-ingredients">${ingHtml}</ul>
 
-        <div class="meal-subtitle">步骤</div>
-        <ul class="meal-steps">${stepsHtml}</ul>
+          <div class="meal-subtitle">步骤</div>
+          <ul class="meal-steps">${stepsHtml}</ul>
 
-        ${tipsHtml}
+          ${tipsHtml}
 
-        <div class="meal-actions">
-          ${saveBtn}
-        </div>
-      </article>
-    `;
+          <div class="meal-actions">
+            ${saveBtn}
+          </div>
+        </article>
+      `;
+    } catch (e) {
+      console.error('renderDishCard error:', slot, idx, e);
+      return `<div class="empty-state" style="padding:16px"><p>菜品渲染失败</p></div>`;
+    }
   }
+}
+
+/**
+ * 异步确认弹框（替代原生 window.confirm，避免宿主 React 包装层拦截引发状态循环）
+ * @param {string} message 确认说明文字
+ * @param {string} [title] 弹框标题
+ * @param {string} [okText] 确认按钮文案
+ * @returns {Promise<boolean>} 用户点确认 → true，取消 → false
+ */
+function asyncConfirm(message, title = '确认', okText = '确认') {
+  return new Promise((resolve) => {
+    // 移除已有的（避免重复）
+    document.querySelectorAll('.recommend-modal-overlay').forEach((el) => el.remove());
+
+    const overlay = document.createElement('div');
+    overlay.className = 'recommend-modal-overlay';
+    overlay.innerHTML = `
+      <div class="recommend-modal" role="dialog" aria-modal="true" aria-labelledby="async-confirm-title">
+        <div class="recommend-modal-icon">⚠️</div>
+        <div class="recommend-modal-title" id="async-confirm-title">${escapeText(title)}</div>
+        <div class="recommend-modal-desc">${escapeText(message)}</div>
+        <div class="recommend-modal-actions">
+          <button class="btn btn-primary" id="async-confirm-ok" type="button">${escapeText(okText)}</button>
+          <button class="btn" id="async-confirm-cancel" type="button">取消</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const $ok = overlay.querySelector('#async-confirm-ok');
+    const $cancel = overlay.querySelector('#async-confirm-cancel');
+    const close = (result) => {
+      overlay.remove();
+      resolve(result);
+    };
+
+    $ok.addEventListener('click', () => close(true));
+    $cancel.addEventListener('click', () => close(false));
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) close(false);
+    });
+    // ESC 取消
+    const onKey = (e) => {
+      if (e.key === 'Escape') {
+        document.removeEventListener('keydown', onKey);
+        close(false);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    setTimeout(() => $ok.focus(), 0);
+  });
 }
 
 function escapeText(s) {

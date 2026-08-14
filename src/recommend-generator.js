@@ -20,7 +20,7 @@
 //   - 可测试：通过注入 services 替换 AI 调用、菜谱查询等依赖
 
 import { streamChat } from './ai-client.js';
-import { getAllRecipes } from './db.js';
+import { getAllRecipes, getAllPreferences } from './db.js';
 
 // ================== 提示词 ==================
 
@@ -74,7 +74,7 @@ const SYSTEM_PROMPT = `你是一位专业的营养师与家常菜搭配顾问，
    - 总之每餐务必保证"一荤一素 + 第三道菜"的结构。
 3. **优先从用户菜谱库挑选**：下面会给你一份用户已有的菜谱列表（JSON 数组）。如果有合适的，直接选它，并把菜谱的 id 填入 dish.recipe_id，dish.from_library=true，recipe 内容完整复制用户菜谱内容。
 4. **AI 自行补齐**：如果用户菜谱库是空的、或搭配上缺少某餐合适的菜、或用户菜谱不够荤素平衡，请由你自行设计家常菜菜谱，并把 dish.recipe_id=null，dish.from_library=false，recipe 内容由你填写完整。
-5. **一日三餐营养健康**：
+5. **一日三餐营养健康**（注：此项优先级最低，若与下方第 9 条用户偏好冲突，**完全服从第 9 条**）：
    - 早餐：以易消化、有碳水+蛋白为主（如粥、面、蛋、包子、牛奶麦片等家常菜）。
    - 午餐：以饱腹、主菜+荤素搭配为主。
    - 晚餐：清淡不过饱，荤素合理，避免过油。
@@ -82,38 +82,62 @@ const SYSTEM_PROMPT = `你是一位专业的营养师与家常菜搭配顾问，
 6. **荤素区分参考**（供你搭配时判断，不必写出来）：明显含猪/牛/羊/鸡/鸭/鱼/虾等动物肉类的视为荤；蛋、奶、豆腐、素菜等可灵活搭配。
 7. 三餐的菜可以有不同的烹饪风格（炒、蒸、炖、煮、凉拌），但都是普通家庭能做的家常菜，不要出现高端食材或专业厨房设备。
 8. 输出必须是合法 JSON，不要加任何前后文字。
-`;
+9. ⭐ **用户个人偏好（最高优先级，本条无条件压倒所有其他规则）**：
+   用户消息中会附带一份「用户饮食偏好标签」列表（如"不吃辣""不要油炸""爱吃甜"等，也可能为空列表表示没特别偏好）。
+   如果这份列表里的任何一条，与上面第 5 条的「营养均衡 / 荤素合理 / 少盐少油」存在冲突，
+   **必须 100% 服从用户偏好，绝不要用健康理由否决用户**。
+   例如：用户说「爱吃高油高糖」→ 推荐就允许偏油偏甜的菜，不要强行塞清淡健康。
+   例如：用户说「不吃辣」→ 所有菜都不能用辣椒/辣酱/麻辣口味。
+   如果存在这种"冲突但按用户要求"的搭配，请在 nutrition_note 里**用一句话向用户说明**（例如："根据你偏好高油高糖，本次推荐口味偏重，已尽量在配菜里加入少量绿叶菜平衡维生素"），这样用户知道你是按他的喜好执行。`;
 
-/** 构建用户消息（把用户菜谱库以 JSON 方式提供给 AI） */
-function buildUserMessage(libraryRecipes) {
+/** 构建用户消息（把用户菜谱库 + 偏好标签 以文字方式提供给 AI）
+ * @param {Array} libraryRecipes 菜谱库
+ * @param {string[]} preferences 用户偏好标签（纯文字数组，空数组表示没设置偏好）
+ */
+function buildUserMessage(libraryRecipes, preferences = []) {
+  const safeLib = Array.isArray(libraryRecipes) ? libraryRecipes : [];
+  const userPrefs = Array.isArray(preferences)
+    ? preferences.map((p) => String(p || '').trim()).filter(Boolean)
+    : [];
+  const prefBlock =
+    userPrefs.length > 0
+      ? `【用户个人偏好（本项优先级最高，冲突时无条件压倒营养均衡规则）】
+以下是用户输入的饮食偏好 / 忌口列表，每条必须严格遵守：
+${userPrefs.map((p, i) => `${i + 1}. ${p}`).join('\n')}
+
+重要：若其中任何偏好与"健康、清淡、少盐少油"等通用营养原则冲突，请**完全按用户偏好执行**，不要用"不健康"为由调整，最多在 nutrition_note 里写一句"按你的偏好，本次×××，但保留了少量×××作补充"。\n\n`
+      : '【用户个人偏好】：用户暂未设置任何偏好标签，请按默认的营养均衡原则搭配即可。\n\n';
+
   let text;
-  if (!libraryRecipes || libraryRecipes.length === 0) {
-    text = `当前我的菜谱库里没有任何菜谱。请由你自行搭配推荐今天的一日三餐，要求健康丰富，荤素合理。\n直接输出 JSON。`;
+  if (safeLib.length === 0) {
+    text = `${prefBlock}当前我的菜谱库里没有任何菜谱。请由你自行搭配推荐今天的一日三餐，要求健康丰富，荤素合理（除非用户偏好另有要求）。\n直接输出 JSON。`;
   } else {
     // 只挑必要字段传给AI，节省token：id, name, intro, ingredients(只name+amount), steps, tips
-    const compact = libraryRecipes.map((r) => ({
+    const compact = safeLib.map((r) => ({
       id: r.id,
       name: r.name,
       intro: r.intro || '',
-      ingredients: (r.ingredients || []).map((i) => ({
-        name: i.name,
-        amount: i.amount || '适量',
-      })),
+      ingredients: Array.isArray(r.ingredients)
+        ? r.ingredients.map((i) => ({
+            name: i?.name || '',
+            amount: i?.amount || '适量',
+          }))
+        : [],
       steps: Array.isArray(r.steps) ? r.steps : [],
       tips: r.tips || '',
       // 给 AI 的搭配线索：判断荤素（粗略提示，让AI更懂）
       _hint_tags: guessTags(r),
     }));
-    text = `以下是我已有的菜谱库（JSON 数组），每条都有 id 字段：
+    text = `${prefBlock}以下是我已有的菜谱库（JSON 数组），每条都有 id 字段：
 ${JSON.stringify(compact, null, 2)}
 
-请参考上面的菜谱，为我推荐今天的一日三餐。
+请参考上面的菜谱和用户偏好，为我推荐今天的一日三餐。
 要求：
 1. 早餐 1～3 道菜，午餐和晚餐各 3 道菜。
-2. 午餐和晚餐必须"一荤一素 + 第三道菜"（花荤/汤/其他），保证荤素搭配。
+2. 午餐和晚餐必须"一荤一素 + 第三道菜"（花荤/汤/其他），保证荤素搭配（用户偏好明确禁止的菜式可以例外，服从偏好）。
 3. 优先从菜谱库里挑合适的菜（填入 recipe_id 和完整 recipe，from_library=true）。
 4. 如果菜谱库里某餐没有合适的菜，或者为了营养均衡需要搭配新菜，就由你自行设计菜谱（recipe_id=null，from_library=false）。
-5. 注意整体营养均衡，一天的三餐尽量覆盖蛋白质、蔬菜、主食。
+5. 默认注意整体营养均衡；但用户偏好永远是第一优先级。
 6. 直接按系统提示的 JSON 结构输出，每餐的菜品放在 dishes 数组里。`;
   }
   return { role: 'user', content: text };
@@ -122,8 +146,10 @@ ${JSON.stringify(compact, null, 2)}
 /** 粗略给菜谱打标签，帮助 AI 快速判断荤素（仅作提示） */
 function guessTags(recipe) {
   const tags = [];
-  const name = (recipe.name || '').toLowerCase();
-  const ingNames = (recipe.ingredients || []).map((i) => (i.name || '').toLowerCase());
+  const name = (recipe?.name || '').toLowerCase();
+  const ingNames = Array.isArray(recipe?.ingredients)
+    ? recipe.ingredients.map((i) => (i?.name || '').toLowerCase())
+    : [];
   const allText = [name, ...ingNames].join(' ');
   const meatKeywords = ['肉', '猪', '牛', '羊', '鸡', '鸭', '鱼', '虾', '排骨', '五花', '里脊', '腿', '翅', '腩', '肝', '肚', '肠', '蟹', '贝', '鱿', '墨', '骨', '牛腩', '猪肉', '牛肉', '羊肉', '鸡肉', '鱼肉', 'beef', 'pork', 'chicken', 'fish', 'shrimp'];
   const vegKeywords = ['蔬', '菜', '青', '瓜', '番茄', '西红柿', '茄', '椒', '土豆', '萝卜', '白菜', '生菜', '菠菜', '豆腐', '豆干', '豆', '菇', '菌', '笋', '藕', '海带', '木耳'];
@@ -272,6 +298,7 @@ export function parseRecommendationResponse(rawText) {
  * @param {object} opts
  * @param {object} opts.config API 配置 {base_url, api_key, model}
  * @param {()=>Promise<Array>} [opts.getAllRecipes] 获取用户菜谱库
+ * @param {()=>Promise<Array<{id:string, value:string}>>} [opts.getAllPreferences] 获取用户偏好标签
  * @param {Function} [opts.streamChat] 流式聊天
  * @param {Function} [opts.onDelta] 每段 content token 回调（用于UI实时显示）
  * @param {Function} [opts.onReasoning] 思维链回调
@@ -281,19 +308,27 @@ export function parseRecommendationResponse(rawText) {
  */
 export async function generateDailyRecommendation(opts = {}) {
   const _getAllRecipes = opts.getAllRecipes || getAllRecipes;
+  const _getAllPreferences = opts.getAllPreferences || getAllPreferences;
   const _streamChat = opts.streamChat || streamChat;
   if (!opts.config) throw new Error('缺少 API 配置');
   if (!opts.config.base_url || !opts.config.api_key || !opts.config.model) {
     throw new Error('API 配置不完整');
   }
 
-  // 1. 先拿菜谱库
-  const library = await _getAllRecipes();
+  // 1. 先拿菜谱库 + 偏好标签（并行加速）
+  const [library, prefRecords] = await Promise.all([
+    _getAllRecipes(),
+    _getAllPreferences().catch(() => []), // 失败降级为空数组
+  ]);
+  // 偏好只取 value 纯文本数组
+  const preferenceValues = Array.isArray(prefRecords)
+    ? prefRecords.map((p) => (p && typeof p.value === 'string' ? p.value : '')).filter(Boolean)
+    : [];
 
-  // 2. 构建 messages
+  // 2. 构建 messages（把偏好送入用户消息）
   const messages = [
     { role: 'system', content: SYSTEM_PROMPT },
-    buildUserMessage(library),
+    buildUserMessage(library, preferenceValues),
   ];
 
   // 3. 流式调用 AI

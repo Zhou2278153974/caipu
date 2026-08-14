@@ -317,7 +317,7 @@ describe('今日推荐 - 视图', () => {
     expect(btns.length).toBe(0);
   });
 
-  it('弹框点击「确认」会调用 goToView(settings) 并关闭弹框', async () => {
+  it('弹框点击「确认」会调用 goToView(settings, { subpage: "api" }) 并关闭弹框', async () => {
     const goToView = vi.fn();
     const c = mountView({
       getApiConfig: vi.fn().mockResolvedValue({ base_url: '', api_key: '', model: '' }),
@@ -328,7 +328,7 @@ describe('今日推荐 - 视图', () => {
     expect(overlay).toBeTruthy();
     overlay.querySelector('#recommend-modal-confirm').click();
     await flush();
-    expect(goToView).toHaveBeenCalledWith('settings');
+    expect(goToView).toHaveBeenCalledWith('settings', { subpage: 'api' });
     // 弹框已关闭
     expect(document.querySelector('.recommend-modal-overlay')).toBeNull();
   });
@@ -438,6 +438,47 @@ describe('今日推荐 - 视图', () => {
     expect(c.textContent).toContain('来自菜谱库');
   });
 
+  it('菜谱数据异常：ingredients 或 steps 为 undefined/null 时不崩溃（显示空列表）', async () => {
+    const today = getTodayKey();
+    // 构造有缺陷的菜谱数据（模拟 AI 返回异常结构）
+    const meals = {
+      breakfast: { dishes: [
+        // ingredients 为 undefined
+        { recipe_id: null, from_library: false, recipe: { name: '异常早餐', intro: '', ingredients: undefined, steps: ['步骤1'], tips: '' } },
+        // steps 为 null
+        { recipe_id: null, from_library: false, recipe: { name: '异常早餐2', intro: '', ingredients: [{ name: '盐', amount: '少许' }], steps: null, tips: '' } },
+      ] },
+      lunch:     { dishes: [
+        // ingredients 和 steps 都缺失
+        { recipe_id: null, from_library: false, recipe: { name: '异常午餐', intro: '', tips: '' } },
+      ] },
+      dinner:    { dishes: [
+        // 正常菜谱（对比用）
+        { recipe_id: null, from_library: false, recipe: makeMealRecipe('正常晚餐') },
+      ] },
+    };
+    await saveRecommendation(today, { generated_at: Date.now(), nutrition_note: '测试异常数据', meals });
+
+    const c = mountView({
+      getApiConfig: vi.fn().mockResolvedValue({ base_url: 'x', api_key: 'x', model: 'x' }),
+      getRecommendation,
+    });
+    await flush(50);
+
+    // 页面应该正常渲染，不崩溃
+    expect(c.querySelector('.meal-accordion-item')).toBeTruthy();
+    // 三个餐段都渲染出来
+    const panels = c.querySelectorAll('.meal-accordion-item');
+    expect(panels.length).toBe(3);
+    // 异常菜谱也显示出来（菜名存在）
+    expect(c.textContent).toContain('异常早餐');
+    expect(c.textContent).toContain('异常早餐2');
+    expect(c.textContent).toContain('异常午餐');
+    expect(c.textContent).toContain('正常晚餐');
+    // 营养点评正常显示
+    expect(c.querySelector('#recommend-nutrition')).toBeTruthy();
+  });
+
   it('换一批按钮点击后会走重新生成流程（确认后调用 generate 并写入缓存）', async () => {
     const today = getTodayKey();
     const meal = (name) => ({ dishes: [ { recipe_id: null, from_library: false, recipe: makeMealRecipe(name) } ] });
@@ -458,8 +499,6 @@ describe('今日推荐 - 视图', () => {
       nutrition_note: '新版营养',
       meals: mealsNew,
     });
-    // 拦截 confirm 返回 true
-    vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
 
     const c = mountView({
       getApiConfig: vi.fn().mockResolvedValue({ base_url: 'x', api_key: 'x', model: 'x' }),
@@ -473,6 +512,11 @@ describe('今日推荐 - 视图', () => {
     expect(btn.textContent).toBe('换一批');
     btn.click();
     await flush(30);
+    // 现在用的是自定义 asyncConfirm 弹框，需要点弹框的确认按钮
+    const okBtn = document.querySelector('#async-confirm-ok');
+    expect(okBtn).toBeTruthy();
+    okBtn.click();
+    await flush(50);
     expect(generateDailyRecommendation).toHaveBeenCalledTimes(1);
     // 页面内容被更新
     expect(c.textContent).toContain('新早餐');
@@ -480,8 +524,6 @@ describe('今日推荐 - 视图', () => {
     const after = await getRecommendation(today);
     expect(after.nutrition_note).toBe('新版营养');
     expect(after.meals.breakfast.dishes[0].recipe.name).toBe('新早餐');
-
-    vi.unstubAllGlobals();
   });
 
   it('每餐 dishes 数组结构：午餐折叠面板内渲染3道菜卡片，晚餐3道，早餐1道', async () => {
@@ -682,5 +724,180 @@ describe('今日推荐 - app 导航集成', () => {
     const hasStreamUI = root.querySelector('#stream-progress') || root.querySelector('#stream-reasoning');
     const hasError = root.querySelector('.status-error');
     expect(hasStreamUI || hasError).toBeTruthy();
+  });
+});
+
+// =============== 新增：用户偏好注入 prompt ===============
+describe('今日推荐 - 用户偏好注入 prompt', () => {
+  const CONFIG = { base_url: 'https://x/v1', api_key: 'sk-1', model: 'm1' };
+
+  function makeRecipe(name, extra = {}) {
+    return {
+      name,
+      intro: '',
+      ingredients: [{ name: '鸡蛋', amount: '2个' }],
+      steps: ['第一步怎么做'],
+      tips: '',
+      ...extra,
+    };
+  }
+  function fullRecommendation() {
+    return {
+      nutrition_note: '今天有荤有素',
+      meals: {
+        breakfast: { dishes: [{ recipe_id: null, from_library: false, recipe: makeRecipe('燕麦牛奶') }] },
+        lunch: { dishes: [
+          { recipe_id: null, from_library: false, recipe: makeRecipe('A') },
+          { recipe_id: null, from_library: false, recipe: makeRecipe('B') },
+          { recipe_id: null, from_library: false, recipe: makeRecipe('C') },
+        ] },
+        dinner: { dishes: [
+          { recipe_id: null, from_library: false, recipe: makeRecipe('D') },
+          { recipe_id: null, from_library: false, recipe: makeRecipe('E') },
+          { recipe_id: null, from_library: false, recipe: makeRecipe('F') },
+        ] },
+      },
+    };
+  }
+
+  it('generateDailyRecommendation 会并行调用 getAllRecipes 和 getAllPreferences', async () => {
+    const getAllRecipes = vi.fn().mockResolvedValue([]);
+    const getAllPreferences = vi.fn().mockResolvedValue([]);
+    const streamChat = vi.fn().mockResolvedValue({
+      content: JSON.stringify(fullRecommendation()),
+      reasoning: '',
+    });
+    await generateDailyRecommendation({
+      config: CONFIG,
+      getAllRecipes,
+      getAllPreferences,
+      streamChat,
+    });
+    expect(getAllRecipes).toHaveBeenCalledTimes(1);
+    expect(getAllPreferences).toHaveBeenCalledTimes(1);
+  });
+
+  it('3 条偏好：user message 里包含偏好块标题、编号列表、"优先级最高"和"冲突时压倒营养均衡"', async () => {
+    const prefRecords = [
+      { id: 'p1', value: '不吃辣', created_at: 1 },
+      { id: 'p2', value: '不要油炸', created_at: 2 },
+      { id: 'p3', value: '爱吃高油高糖', created_at: 3 },
+    ];
+    const streamChat = vi.fn().mockResolvedValue({
+      content: JSON.stringify(fullRecommendation()),
+      reasoning: '',
+    });
+    await generateDailyRecommendation({
+      config: CONFIG,
+      getAllRecipes: vi.fn().mockResolvedValue([]),
+      getAllPreferences: vi.fn().mockResolvedValue(prefRecords),
+      streamChat,
+    });
+    expect(streamChat).toHaveBeenCalledTimes(1);
+    const messages = streamChat.mock.calls[0][1];
+    const userText = typeof messages[1].content === 'string' ? messages[1].content : '';
+
+    // 偏好块标题与优先级声明
+    expect(userText).toContain('用户个人偏好');
+    expect(userText).toContain('优先级最高');
+    expect(userText).toContain('压倒营养均衡');
+
+    // 三条偏好逐条列入，编号 1/2/3
+    expect(userText).toMatch(/1\.\s*不吃辣/);
+    expect(userText).toMatch(/2\.\s*不要油炸/);
+    expect(userText).toMatch(/3\.\s*爱吃高油高糖/);
+  });
+
+  it('偏好为空（空数组）：user message 写"暂未设置任何偏好标签"并要求默认营养均衡', async () => {
+    const streamChat = vi.fn().mockResolvedValue({
+      content: JSON.stringify(fullRecommendation()),
+      reasoning: '',
+    });
+    await generateDailyRecommendation({
+      config: CONFIG,
+      getAllRecipes: vi.fn().mockResolvedValue([]),
+      getAllPreferences: vi.fn().mockResolvedValue([]),
+      streamChat,
+    });
+    const userText = streamChat.mock.calls[0][1][1].content;
+    expect(userText).toContain('用户暂未设置任何偏好标签');
+    expect(userText).toContain('营养均衡原则');
+  });
+
+  it('偏好数组里含空字符串/非字符串 → filter 过滤掉，只保留纯文字', async () => {
+    // 模拟 getAllPreferences 返回一些脏数据（value 为空或非字符串，实际 db 层应已过滤，但生成层做了二次兜底）
+    const prefRecords = [
+      { id: 'p1', value: '', created_at: 1 },           // 空 → 应被过滤
+      { id: 'p2', value: '少盐少油', created_at: 2 },   // 正常
+      { id: 'p3', value: null, created_at: 3 },         // null → 过滤
+      { id: 'p4', value: undefined, created_at: 4 },    // undefined → 过滤
+      { id: 'p5', value: '   ', created_at: 5 },        // 全空格 → trim 后为空，会被过滤
+      { id: 'p6', value: ' 不要香菜  ', created_at: 6 }, // trim → "不要香菜"
+    ];
+    const streamChat = vi.fn().mockResolvedValue({
+      content: JSON.stringify(fullRecommendation()),
+      reasoning: '',
+    });
+    await generateDailyRecommendation({
+      config: CONFIG,
+      getAllRecipes: vi.fn().mockResolvedValue([]),
+      getAllPreferences: vi.fn().mockResolvedValue(prefRecords),
+      streamChat,
+    });
+    const userText = streamChat.mock.calls[0][1][1].content;
+
+    // 只有两条有效偏好
+    expect(userText).toMatch(/1\.\s*少盐少油/);
+    expect(userText).toMatch(/2\.\s*不要香菜/);
+    // 脏值不应出现
+    expect(userText).not.toContain('p1');
+    expect(userText).not.toMatch(/null/);
+  });
+
+  it('getAllPreferences 抛错时降级为空数组，不影响推荐流程', async () => {
+    const streamChat = vi.fn().mockResolvedValue({
+      content: JSON.stringify(fullRecommendation()),
+      reasoning: '',
+    });
+    // 让 getAllPreferences 抛错
+    const getPrefs = vi.fn().mockRejectedValue(new Error('preferences store 不存在'));
+    // 不能抛错出来，必须正常返回推荐
+    const result = await generateDailyRecommendation({
+      config: CONFIG,
+      getAllRecipes: vi.fn().mockResolvedValue([]),
+      getAllPreferences: getPrefs,
+      streamChat,
+    });
+    expect(getPrefs).toHaveBeenCalledTimes(1);
+    expect(result.meals.breakfast.dishes[0].recipe.name).toBe('燕麦牛奶');
+    // 用户消息里是"暂未设置任何偏好"（因为降级为空数组）
+    const userText = streamChat.mock.calls[0][1][1].content;
+    expect(userText).toContain('暂未设置任何偏好标签');
+  });
+
+  it('system prompt 中明确声明：用户偏好无条件压倒第 5 条营养均衡规则', () => {
+    // 通过静态导入的 SYSTEM_PROMPT 不好直接拿到（是模块内部变量），
+    // 改用实际调用后看 streamChat 收到的 messages[0].content 来断言
+    const streamChat = vi.fn().mockResolvedValue({
+      content: JSON.stringify(fullRecommendation()),
+      reasoning: '',
+    });
+    return generateDailyRecommendation({
+      config: CONFIG,
+      getAllRecipes: vi.fn().mockResolvedValue([]),
+      getAllPreferences: vi.fn().mockResolvedValue([]),
+      streamChat,
+    }).then(() => {
+      const sysText = streamChat.mock.calls[0][1][0].content;
+      // 第 9 条的关键字
+      expect(sysText).toContain('用户个人偏好');
+      expect(sysText).toContain('最高优先级');
+      expect(sysText).toContain('无条件压倒所有其他规则');
+      expect(sysText).toContain('100% 服从用户偏好');
+      // 示例：爱吃高油高糖 → 允许偏油偏甜
+      expect(sysText).toContain('爱吃高油高糖');
+      // 示例：在 nutrition_note 里向用户说明
+      expect(sysText).toContain('nutrition_note');
+    });
   });
 });

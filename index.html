@@ -3,11 +3,28 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>我的菜谱</title>
+  <script>
+    // 【同步首帧主题】：在 CSS 生效后、首帧绘制前立刻给 <html> 写入 data-theme。
+    // 保证刷新后瞬间就是用户上次选择的主题，避免深色闪白 / 浅色闪黑。
+    // 主题持久化双通道：
+    //   localStorage  → 同步读，负责首帧正确性（fallback: 'dark'）
+    //   IndexedDB     → 异步读写，作为权威持久化值，加载完成后会校正 localStorage
+    (function () {
+      try {
+        var KEY = 'personal-recipe-app:theme';
+        var raw = window.localStorage.getItem(KEY);
+        var theme = (raw === 'light' || raw === 'dark') ? raw : 'dark';
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (_) {
+        // localStorage 禁用 / 隐私模式：回退到默认深色（保持原行为不变）
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
 </head>
 <body>
   <div id="app"></div>
   <script type="module" src="/src/main.js"></script>
-
 
 
 

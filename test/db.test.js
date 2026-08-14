@@ -10,13 +10,33 @@ import {
   getApiConfig,
   saveApiConfig,
   clearAllSettings,
+  // 新增：偏好
+  addPreference,
+  getAllPreferences,
+  removePreference,
+  clearAllPreferences,
+  // 新增：分组清除 / 计数
+  clearDataExceptRecipes,
+  clearRecipeDataOnly,
+  getDataCounts,
+  // 新增：主题
+  getTheme,
+  saveTheme,
+  THEME_DARK,
+  THEME_LIGHT,
+  DEFAULT_THEME,
+  // 推荐缓存（用于分组清除验证）
+  saveRecommendation,
+  getRecommendation,
+  getTodayKey,
 } from '../src/db.js';
 
 beforeEach(async () => {
   _resetDbForTesting();
   // fake-indexeddb 每个测试都是全新内存库，但保险起见显式清空
-  await clearAllRecipes();
-  await clearAllSettings();
+  await clearAllRecipes().catch(() => {});
+  await clearAllSettings().catch(() => {});
+  await clearAllPreferences().catch(() => {});
 });
 
 describe('存储层 - 菜谱 CRUD', () => {
@@ -126,5 +146,212 @@ describe('存储层 - 设置', () => {
     await saveApiConfig({ base_url: 'x', api_key: 'y', model: 'z' });
     await clearAllSettings();
     expect(await getApiConfig()).toEqual({ base_url: '', api_key: '', model: '' });
+  });
+});
+
+// ============ 新增：用户饮食偏好 ============
+describe('存储层 - 偏好标签 CRUD', () => {
+  it('addPreference 空字符串/全空格 → 抛错', async () => {
+    await expect(addPreference('')).rejects.toThrow(/不能为空/);
+    await expect(addPreference('   ')).rejects.toThrow(/不能为空/);
+    await expect(addPreference(null)).rejects.toThrow(/不能为空/);
+    await expect(addPreference(undefined)).rejects.toThrow(/不能为空/);
+  });
+
+  it('addPreference 返回带 id/value/created_at 的对象，value 已 trim', async () => {
+    const p = await addPreference('  不吃辣  ');
+    expect(typeof p.id).toBe('string');
+    expect(p.id.startsWith('p_')).toBe(true); // uid 前缀
+    expect(p.value).toBe('不吃辣'); // trim 生效
+    expect(typeof p.created_at).toBe('number');
+    expect(p.created_at).toBeGreaterThan(0);
+  });
+
+  it('getAllPreferences 初始为空数组', async () => {
+    const list = await getAllPreferences();
+    expect(Array.isArray(list)).toBe(true);
+    expect(list).toEqual([]);
+  });
+
+  it('getAllPreferences 按 created_at 升序（先加的在前）', async () => {
+    // 用固定 created_at 保证顺序
+    const a = await addPreference('先加');
+    await new Promise((res) => setTimeout(res, 2));
+    const b = await addPreference('后加');
+    const list = await getAllPreferences();
+    expect(list.map((p) => p.value)).toEqual(['先加', '后加']);
+    // 值正确
+    expect(list[0].id).toBe(a.id);
+    expect(list[1].id).toBe(b.id);
+  });
+
+  it('removePreference 存在则删除返回 true，不存在返回 false', async () => {
+    const p = await addPreference('要删除的');
+    expect(await getAllPreferences()).toHaveLength(1);
+    expect(await removePreference(p.id)).toBe(true);
+    expect(await getAllPreferences()).toHaveLength(0);
+    // 再删一次 → false
+    expect(await removePreference(p.id)).toBe(false);
+    // 假 id → false
+    expect(await removePreference('')).toBe(false);
+    expect(await removePreference(null)).toBe(false);
+  });
+
+  it('clearAllPreferences 清空全部', async () => {
+    await addPreference('A');
+    await addPreference('B');
+    await addPreference('C');
+    expect(await getAllPreferences()).toHaveLength(3);
+    await clearAllPreferences();
+    expect(await getAllPreferences()).toEqual([]);
+  });
+});
+
+// ============ 新增：主题持久化 ============
+describe('存储层 - 主题', () => {
+  it('默认未保存主题时返回 DEFAULT_THEME (dark)', async () => {
+    expect(await getTheme()).toBe(DEFAULT_THEME);
+    expect(DEFAULT_THEME).toBe(THEME_DARK);
+  });
+
+  it('saveTheme(THEME_LIGHT) → getTheme 返回 light', async () => {
+    await saveTheme(THEME_LIGHT);
+    expect(await getTheme()).toBe(THEME_LIGHT);
+  });
+
+  it('saveTheme(THEME_DARK) → getTheme 返回 dark', async () => {
+    await saveTheme(THEME_LIGHT);
+    await saveTheme(THEME_DARK);
+    expect(await getTheme()).toBe(THEME_DARK);
+  });
+
+  it('saveTheme 非法值抛错', async () => {
+    await expect(saveTheme('banana')).rejects.toThrow(/不支持的主题/);
+    await expect(saveTheme('')).rejects.toThrow(/不支持的主题/);
+    await expect(saveTheme(null)).rejects.toThrow(/不支持的主题/);
+  });
+
+  it('clearAllSettings 后 getTheme 回落到 DEFAULT_THEME', async () => {
+    await saveTheme(THEME_LIGHT);
+    expect(await getTheme()).toBe(THEME_LIGHT);
+    await clearAllSettings();
+    expect(await getTheme()).toBe(DEFAULT_THEME);
+  });
+});
+
+// ============ 新增：分组清除 + 数据计数 ============
+describe('存储层 - 分组清除与计数', () => {
+  /** 写入一些基础数据，用于分组清除测试 */
+  async function seedAll() {
+    // 菜谱 2 条
+    const r1 = await createRecipe({ name: '菜谱1' });
+    const r2 = await createRecipe({ name: '菜谱2' });
+    // API 配置
+    await saveApiConfig({ base_url: 'https://x/v1', api_key: 'sk-x', model: 'm-x' });
+    // 偏好 2 条
+    const p1 = await addPreference('不吃辣');
+    const p2 = await addPreference('爱吃甜');
+    // 推荐缓存 2 天
+    const today = getTodayKey();
+    const tomorrow = getTodayKey(new Date(Date.now() + 86400000));
+    const mealStub = {
+      breakfast: { dishes: [] },
+      lunch: { dishes: [] },
+      dinner: { dishes: [] },
+    };
+    await saveRecommendation(today, { generated_at: 1, nutrition_note: 'A', meals: mealStub });
+    await saveRecommendation(tomorrow, { generated_at: 2, nutrition_note: 'B', meals: mealStub });
+    return { r1, r2, p1, p2, today, tomorrow };
+  }
+
+  it('getDataCounts 初始状态：全部为 0 / 未配置', async () => {
+    const c = await getDataCounts();
+    expect(c.recipes).toBe(0);
+    expect(c.preferences).toBe(0);
+    expect(c.recommendations).toBe(0);
+    expect(c.hasApiConfig).toBe(false);
+  });
+
+  it('getDataCounts 写入后计数正确，hasApiConfig 判断合理', async () => {
+    await seedAll();
+    const c = await getDataCounts();
+    expect(c.recipes).toBe(2);
+    expect(c.preferences).toBe(2);
+    expect(c.recommendations).toBe(2);
+    expect(c.hasApiConfig).toBe(true);
+  });
+
+  it('clearDataExceptRecipes：清除 API/偏好/推荐缓存，菜谱保留', async () => {
+    const { r1, r2, today, tomorrow } = await seedAll();
+    // 执行清除
+    await clearDataExceptRecipes();
+
+    // 菜谱应该还在
+    const recipesAfter = await getAllRecipes();
+    expect(recipesAfter.map((r) => r.id).sort()).toEqual([r1.id, r2.id].sort());
+
+    // 其他应该清空
+    expect((await getApiConfig())).toEqual({ base_url: '', api_key: '', model: '' });
+    expect(await getAllPreferences()).toEqual([]);
+    expect(await getRecommendation(today)).toBeNull();
+    expect(await getRecommendation(tomorrow)).toBeNull();
+
+    // 计数验证
+    const c = await getDataCounts();
+    expect(c.recipes).toBe(2); // 菜谱不动
+    expect(c.preferences).toBe(0);
+    expect(c.recommendations).toBe(0);
+    expect(c.hasApiConfig).toBe(false);
+  });
+
+  it('clearRecipeDataOnly：只清除菜谱，API/偏好/推荐缓存都保留', async () => {
+    const { p1, p2, today, tomorrow } = await seedAll();
+    // 执行清除
+    await clearRecipeDataOnly();
+
+    // 菜谱应该清空
+    expect(await getAllRecipes()).toEqual([]);
+
+    // API 配置保留
+    const cfg = await getApiConfig();
+    expect(cfg.base_url).toBe('https://x/v1');
+    expect(cfg.api_key).toBe('sk-x');
+    expect(cfg.model).toBe('m-x');
+
+    // 偏好保留
+    const prefs = await getAllPreferences();
+    expect(prefs.map((p) => p.id).sort()).toEqual([p1.id, p2.id].sort());
+
+    // 推荐缓存保留
+    expect(await getRecommendation(today)).not.toBeNull();
+    expect(await getRecommendation(tomorrow)).not.toBeNull();
+
+    // 计数验证
+    const c = await getDataCounts();
+    expect(c.recipes).toBe(0);
+    expect(c.preferences).toBe(2);
+    expect(c.recommendations).toBe(2);
+    expect(c.hasApiConfig).toBe(true);
+  });
+
+  it('getDataCounts: hasApiConfig 仅其中一个字段有值也算 true', async () => {
+    // 只有 base_url
+    await saveApiConfig({ base_url: 'https://only-base', api_key: '', model: '' });
+    expect((await getDataCounts()).hasApiConfig).toBe(true);
+    await clearAllSettings();
+
+    // 只有 api_key
+    await saveApiConfig({ base_url: '', api_key: 'sk-only', model: '' });
+    expect((await getDataCounts()).hasApiConfig).toBe(true);
+    await clearAllSettings();
+
+    // 只有 model
+    await saveApiConfig({ base_url: '', api_key: '', model: 'only-model' });
+    expect((await getDataCounts()).hasApiConfig).toBe(true);
+    await clearAllSettings();
+
+    // 全空 = 未配置
+    await saveApiConfig({ base_url: '', api_key: '', model: '' });
+    expect((await getDataCounts()).hasApiConfig).toBe(false);
   });
 });
