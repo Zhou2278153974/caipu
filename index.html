@@ -2,7 +2,7 @@
 <html lang="zh-CN"><head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>我的菜谱</title>
+  <title>吃什么</title>
   <script>
     // 【同步首帧主题】：在 CSS 生效后、首帧绘制前立刻给 <html> 写入 data-theme。
     // 保证刷新后瞬间就是用户上次选择的主题，避免深色闪白 / 浅色闪黑。
@@ -142,9 +142,9 @@ JSON 结构如下：
       </div>
     `,M=document.createElement("div");M.innerHTML=A;const R=M.firstElementChild;R.querySelectorAll("button[data-act]").forEach(U=>{U.addEventListener("click",()=>{const W=U.dataset.act;W==="first"?x=1:W==="prev"?x=Math.max(1,u-1):W==="next"?x=Math.min(o,u+1):W==="last"&&(x=o),_()})}),i.appendChild(R)}let T=null;function L(){return T?T.value:""}function _(){const i=e.querySelector("#recipe-list-body"),r=e.querySelector("#pagination-wrap");if(!i||!r)return;const o=O(L()),u=o.length,h=Math.max(1,Math.ceil(u/v));x>h&&(x=h);const b=(x-1)*v,E=o.slice(b,b+v);P(i,E),r.innerHTML="",S(r,u)}async function k(){e.innerHTML=`
       <div class="list-header">
-        <h2 class="section-title">我的菜谱<span class="recipe-count"></span></h2>
+        <h2 class="section-title">菜谱<span class="recipe-count"></span></h2>
         <input id="recipe-search" class="recipe-search" type="text" placeholder="搜索菜名…" autocomplete="off" />
-        <button id="btn-add-recipe" class="btn btn-primary" type="button">+ 新增菜谱</button>
+        <button id="btn-add-recipe" class="btn btn-primary" type="button">+ 新增</button>
       </div>
       <div id="recipe-list-body" class="recipe-list-body">
         <p class="placeholder">加载中…</p>
@@ -153,7 +153,7 @@ JSON 结构如下：
     `,e.querySelector("#btn-add-recipe").addEventListener("click",()=>p());const i=e.querySelector(".recipe-count"),r=e.querySelector("#recipe-list-body"),o=e.querySelector("#pagination-wrap");try{y=await n()}catch(b){r.innerHTML=`<div class="status-box status-error">读取菜谱失败：${B(b.message)}</div>`;return}if(i.textContent=`（${y.length}）`,y.length===0){r.innerHTML=`
         <div class="empty-state">
           <p>还没有保存任何菜谱。</p>
-          <button id="btn-empty-add" class="btn btn-primary" type="button">+ 新增第一条菜谱</button>
+          <button id="btn-empty-add" class="btn btn-primary" type="button">+ 新增第一条</button>
         </div>
       `,r.querySelector("#btn-empty-add").addEventListener("click",()=>p());return}x=1;const u=y.length,h=y.slice(0,v);P(r,h),S(o,u),T=e.querySelector("#recipe-search"),T.addEventListener("input",()=>{x=1,_()})}async function f(i){e.innerHTML='<p class="placeholder">加载中…</p>';let r;try{r=await s(i)}catch(o){e.innerHTML=`<div class="status-box status-error">读取失败：${B(o.message)}</div>`;return}if(!r){e.innerHTML=`
         <div class="status-box status-error">菜谱不存在或已被删除。</div>
@@ -597,7 +597,7 @@ ${JSON.stringify(p,null,2)}
       </div>
     `,document.body.appendChild(a);const d=a.querySelector("#async-confirm-ok"),p=a.querySelector("#async-confirm-cancel"),g=l=>{a.remove(),s(l)};d.addEventListener("click",()=>g(!0)),p.addEventListener("click",()=>g(!1)),a.addEventListener("click",l=>{l.target===a&&g(!1)});const c=l=>{l.key==="Escape"&&(document.removeEventListener("keydown",c),g(!1))};document.addEventListener("keydown",c),setTimeout(()=>d.focus(),0)})}function K(e){return String(e??"").replace(/[&<>]/g,t=>({"&":"&amp;","<":"&lt;",">":"&gt;"})[t])}const X={recipes:{label:"菜谱",render:ze},recommend:{label:"今日推荐",render:ot},settings:{label:"设置",render:Ye}},Ee="personal-recipe-app:theme",me=new Set([Y,Z]);function lt(){try{const e=window.localStorage.getItem(Ee);return me.has(e)?e:null}catch{return null}}function re(e){try{window.localStorage.setItem(Ee,String(e))}catch{}}function ie(e){const t=me.has(e)?e:ee;document.documentElement.setAttribute("data-theme",t)}function dt(e){let t="recipes",n=null,s={toggle:null,menu:null},a=!1;async function d(c,{save:l=!0}={}){const y=me.has(c)?c:ee;if(ie(y),re(y),l)try{await he(y)}catch(v){throw new Error(`主题保存失败：${v&&v.message?v.message:String(v)}`)}return y}(async()=>{try{const c=await oe();ie(c),re(c)}catch{const c=lt(),l=c!==null?c:ee;ie(l),re(l)}})();function p(){const c=X[t]||X.recipes;e.innerHTML="",e.appendChild(g());const l=e.querySelector("#view-content");l.innerHTML="",c.render(l,{goToView:(y,v={})=>{X[y]&&(t=y,n=v.subpage||null,p())},initialSubpage:n,applyTheme:d,THEME_DARK:Y,THEME_LIGHT:Z,getTheme:oe}),n=null}function g(){const c=document.createElement("div");c.className="app-shell",c.innerHTML=`
       <header class="app-header">
-        <h1 class="app-title">我的菜谱</h1>
+        <h1 class="app-title">吃什么</h1>
         <div class="nav-dropdown">
           <button id="nav-toggle" class="nav-toggle" type="button" aria-haspopup="true" aria-expanded="false">
             <span class="nav-toggle-label">${X[t].label}</span>
