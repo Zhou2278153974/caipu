@@ -53,7 +53,7 @@ function defaultServices(extra = {}) {
   return { services, added };
 }
 
-/** 点右上角「+ 添加食材」→ 返回选择菜单 overlay */
+/** 点右上角「+ 新增」→ 返回选择菜单 overlay */
 function openMenu(c) {
   c.querySelector('#fridge-add-btn').click();
   return document.querySelector('.fridge-modal-overlay');
@@ -73,12 +73,12 @@ function gotoAi(c) {
 
 // ============ 列表视图骨架 ============
 describe('我的冰箱 - 列表视图骨架', () => {
-  it('渲染标题、右上角添加按钮、总览区、食材列表区', async () => {
+  it('渲染标题、右上角新增按钮、总览区、食材列表区', async () => {
     const { services } = defaultServices();
     const c = mount(services);
     await flush();
-    expect(c.querySelector('.section-title').textContent).toContain('我的冰箱');
-    expect(c.querySelector('#fridge-add-btn').textContent).toContain('添加食材');
+    expect(c.querySelector('.section-title').textContent).toContain('冰箱');
+    expect(c.querySelector('#fridge-add-btn').textContent).toContain('新增');
     expect(c.querySelector('#fridge-overview')).toBeTruthy();
     expect(c.querySelector('#fridge-list')).toBeTruthy();
     expect(c.querySelector('#fridge-status')).toBeTruthy();
@@ -275,7 +275,7 @@ describe('我的冰箱 - 搜索与分页', () => {
 
 // ============ 添加流程（选择菜单 + 子页切换） ============
 describe('我的冰箱 - 添加流程（选择菜单 + 子页切换）', () => {
-  it('点「+ 添加食材」→ 弹出选择菜单（手动 / AI / 取消）', async () => {
+  it('点「+ 新增」→ 弹出选择菜单（手动 / AI / 取消）', async () => {
     const { services } = defaultServices();
     const c = mount(services);
     await flush();
@@ -318,7 +318,7 @@ describe('我的冰箱 - 添加流程（选择菜单 + 子页切换）', () => {
     c.querySelector('.sub-nav .btn-back').click();
     await flush();
     expect(c.querySelector('#fridge-list')).toBeTruthy();
-    expect(c.querySelector('.section-title').textContent).toContain('我的冰箱');
+    expect(c.querySelector('.section-title').textContent).toContain('冰箱');
   });
 
   it('空状态「添加第一条」→ 弹出选择菜单', async () => {
@@ -345,7 +345,7 @@ describe('我的冰箱 - 手动添加 / 编辑', () => {
     expect(services.addFridgeIngredient).toHaveBeenCalledTimes(1);
     expect(services.addFridgeIngredient).toHaveBeenCalledWith({ name: '排骨', amount: '2', unit: '斤' });
     // 回到列表，显示成功提示与新增行
-    expect(c.querySelector('.section-title').textContent).toContain('我的冰箱');
+    expect(c.querySelector('.section-title').textContent).toContain('冰箱');
     expect(c.querySelector('#fridge-status').className).toContain('status-success');
     expect(c.querySelector('#fridge-status').textContent).toContain('已添加「排骨」');
     expect(c.querySelector('.fridge-item-name').textContent).toBe('排骨');
@@ -400,7 +400,7 @@ describe('我的冰箱 - 手动添加 / 编辑', () => {
     expect(services.updateFridgeIngredient).toHaveBeenCalledTimes(1);
     expect(services.updateFridgeIngredient).toHaveBeenCalledWith({ id: 7, name: '土豆', amount: '2', unit: '斤' });
     // 返回列表 + 成功提示 + 数据更新
-    expect(c.querySelector('.section-title').textContent).toContain('我的冰箱');
+    expect(c.querySelector('.section-title').textContent).toContain('冰箱');
     expect(c.querySelector('#fridge-status').textContent).toContain('已更新「土豆」');
     expect(c.querySelector('.fridge-item-amount').textContent).toBe('2 斤');
   });
@@ -415,7 +415,7 @@ describe('我的冰箱 - 手动添加 / 编辑', () => {
     c.querySelector('#fridge-cancel-edit').click();
     await flush();
     expect(services.updateFridgeIngredient).not.toHaveBeenCalled();
-    expect(c.querySelector('.section-title').textContent).toContain('我的冰箱');
+    expect(c.querySelector('.section-title').textContent).toContain('冰箱');
     expect(c.querySelector('.fridge-item-amount').textContent).toBe('1 斤');
   });
 });
@@ -537,7 +537,7 @@ describe('我的冰箱 - AI 识别（文字）', () => {
     expect(services.addFridgeIngredient).toHaveBeenCalledWith({ name: '排骨', amount: '2', unit: '斤' });
     expect(services.addFridgeIngredient).toHaveBeenCalledWith({ name: '白菜', amount: '1', unit: '棵' });
     // 返回列表 + 成功提示
-    expect(c.querySelector('.section-title').textContent).toContain('我的冰箱');
+    expect(c.querySelector('.section-title').textContent).toContain('冰箱');
     expect(c.querySelector('#fridge-status').className).toContain('status-success');
     expect(c.querySelector('#fridge-status').textContent).toContain('已将 2 种食材加入冰箱');
   });

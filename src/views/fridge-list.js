@@ -23,9 +23,9 @@ export function renderFridgeListView(container, services = {}) {
   function renderShell() {
     container.innerHTML = `
       <div class="list-header">
-        <h2 class="section-title">我的冰箱<span class="recipe-count"></span></h2>
+        <h2 class="section-title">冰箱<span class="recipe-count"></span></h2>
         <input id="fridge-search" class="recipe-search" type="text" placeholder="搜索食材名…" autocomplete="off" />
-        <button id="fridge-add-btn" class="btn btn-primary" type="button">+ 添加食材</button>
+        <button id="fridge-add-btn" class="btn btn-primary" type="button">+ 新增</button>
       </div>
       <div id="fridge-status" class="status-box" role="status" aria-live="polite"></div>
       <div id="fridge-overview"></div>
