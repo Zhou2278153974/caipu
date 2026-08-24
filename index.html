@@ -612,9 +612,9 @@ ${w.join(`
       </div>
     `,document.body.appendChild(s);const v=s.querySelector("#async-confirm-ok"),h=s.querySelector("#async-confirm-cancel"),A=u=>{s.remove(),a(u)};v.addEventListener("click",()=>A(!0)),h.addEventListener("click",()=>A(!1)),s.addEventListener("click",u=>{u.target===s&&A(!1)});const p=u=>{u.key==="Escape"&&(document.removeEventListener("keydown",p),A(!1))};document.addEventListener("keydown",p),setTimeout(()=>v.focus(),0)})}function U(e){return String(e??"").replace(/[&<>]/g,t=>({"&":"&amp;","<":"&lt;",">":"&gt;"})[t])}function $t(e,t={}){const n=t.getAllFridgeIngredients,a=t.deleteFridgeIngredient,s=t.onAdd||(()=>{}),v=t.onEdit||(()=>{}),h=t.initialStatus||null,A=5,p=20;let u=[],y=1,w=null;S(),R();function S(){e.innerHTML=`
       <div class="list-header">
-        <h2 class="section-title">我的冰箱<span class="recipe-count"></span></h2>
+        <h2 class="section-title">冰箱<span class="recipe-count"></span></h2>
         <input id="fridge-search" class="recipe-search" type="text" placeholder="搜索食材名…" autocomplete="off" />
-        <button id="fridge-add-btn" class="btn btn-primary" type="button">+ 添加食材</button>
+        <button id="fridge-add-btn" class="btn btn-primary" type="button">+ 新增</button>
       </div>
       <div id="fridge-status" class="status-box" role="status" aria-live="polite"></div>
       <div id="fridge-overview"></div>
