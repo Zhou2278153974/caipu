@@ -1346,7 +1346,8 @@ label {
 }
 
 /* ===== 弹框（API 配置提示） ===== */
-.recommend-modal-overlay {
+.recommend-modal-overlay,
+.fridge-modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
@@ -1363,7 +1364,8 @@ label {
   to { opacity: 1; }
 }
 
-.recommend-modal {
+.recommend-modal,
+.fridge-modal {
   background: var(--box-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1380,12 +1382,14 @@ label {
   to { transform: translateY(0); opacity: 1; }
 }
 
-.recommend-modal-icon {
+.recommend-modal-icon,
+.fridge-modal-icon {
   font-size: 42px;
   margin-bottom: 12px;
 }
 
-.recommend-modal-title {
+.recommend-modal-title,
+.fridge-modal-title {
   font-size: calc(18px * var(--font-scale) + 1px);
   font-weight: 700;
   color: var(--text-main);
@@ -1396,14 +1400,16 @@ label {
   color: transparent;
 }
 
-.recommend-modal-desc {
+.recommend-modal-desc,
+.fridge-modal-desc {
   font-size: calc(13px * var(--font-scale));
   color: var(--text-sub);
   line-height: 1.7;
   margin-bottom: 20px;
 }
 
-.recommend-modal-actions {
+.recommend-modal-actions,
+.fridge-modal-actions {
   display: flex;
   gap: 12px;
   justify-content: center;
@@ -1955,5 +1961,300 @@ label {
   border: 1px solid color-mix(in srgb, var(--accent-purple) 45%, var(--border));
   border-radius: 999px;
   align-self: flex-start;
+}
+
+/* ===== 我的冰箱 ===== */
+.fridge-form-body,
+.fridge-ai-body {
+  padding: 4px 4px 14px;
+}
+
+.fridge-ai-actions {
+  flex-wrap: wrap;
+}
+
+.fridge-hint {
+  margin-top: 8px;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--text-sub);
+  font-style: italic;
+}
+
+/* 冰箱总览：总数卡片 + 最近添加 */
+.fridge-overview {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 18px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.fridge-overview-card {
+  flex: 0 0 auto;
+  min-width: 132px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px 22px;
+  background: var(--box-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background-image: var(--gradient-main);
+  background-size: 100% 3px;
+  background-position: top;
+  background-repeat: no-repeat;
+}
+
+.fridge-overview-num {
+  font-size: calc(30px * var(--font-scale));
+  font-weight: 800;
+  line-height: 1;
+  background: var(--gradient-main);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.fridge-overview-label {
+  font-size: calc(12px * var(--font-scale));
+  color: var(--text-sub);
+}
+
+.fridge-overview-recent {
+  flex: 1 1 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  background: var(--box-1);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+
+.fridge-overview-recent-title {
+  font-size: calc(12px * var(--font-scale));
+  font-weight: 600;
+  color: var(--text-mute);
+}
+
+.fridge-overview-recent-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fridge-overview-tag {
+  padding: 3px 10px;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--text-main);
+  background: var(--box-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+/* AI 识别结果预览 */
+.fridge-ai-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.fridge-ai-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--box-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: calc(13px * var(--font-scale));
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.fridge-ai-item:hover {
+  border-color: color-mix(in srgb, var(--accent-purple) 55%, var(--border));
+  background: var(--box-2);
+}
+
+.fridge-ai-item input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-purple);
+  cursor: pointer;
+}
+
+.fridge-ai-result-title {
+  font-size: calc(12px * var(--font-scale));
+  font-weight: 600;
+  color: var(--text-mute);
+}
+
+.fridge-ai-item-name {
+  font-weight: 500;
+  color: var(--text-main);
+  flex: 1;
+  min-width: 0;
+}
+
+.fridge-ai-item-amount {
+  color: var(--accent-purple);
+  font-size: calc(12px * var(--font-scale));
+  flex-shrink: 0;
+}
+
+/* 添加方式选择菜单 */
+.fridge-menu-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.fridge-menu-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  text-align: left;
+  justify-content: flex-start;
+  border: 1px solid var(--border);
+  background: var(--box-1);
+  color: var(--text-main);
+  transition: border-color 0.15s, background 0.15s, transform 0.1s;
+}
+
+.fridge-menu-option:hover {
+  border-color: color-mix(in srgb, var(--accent-purple) 55%, var(--border));
+  background: var(--box-2);
+  transform: translateY(-1px);
+}
+
+.fridge-menu-option-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.fridge-menu-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fridge-menu-option-text strong {
+  font-size: calc(14px * var(--font-scale));
+}
+
+.fridge-menu-option-text small {
+  font-size: calc(12px * var(--font-scale));
+  color: var(--text-sub);
+}
+
+/* 食材列表 */
+.fridge-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fridge-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--box-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  position: relative;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.fridge-item:nth-child(even) {
+  background: var(--box-1);
+}
+
+/* 左侧渐变装饰条（hover 显现，与菜谱卡片一致） */
+.fridge-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: var(--radius) 0 0 var(--radius);
+  background: var(--gradient-main);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.fridge-item:hover::before {
+  opacity: 1;
+}
+
+.fridge-item:hover {
+  border-color: color-mix(in srgb, var(--accent-purple) 55%, var(--border));
+}
+
+.fridge-item-index {
+  flex: 0 0 auto;
+  width: 20px;
+  text-align: center;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--text-mute);
+}
+
+.fridge-item-name {
+  font-size: calc(15px * var(--font-scale));
+  font-weight: 600;
+  color: var(--text-main);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fridge-item-amount {
+  font-size: calc(13px * var(--font-scale));
+  color: var(--accent-purple);
+  flex-shrink: 0;
+}
+
+.fridge-item-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.fridge-item-actions .btn-danger {
+  color: var(--accent-danger);
+  border-color: color-mix(in srgb, var(--accent-danger) 55%, var(--border));
+}
+
+.fridge-item-actions .btn-danger:hover {
+  background: color-mix(in srgb, var(--accent-danger) 18%, var(--box-1));
+  border-color: color-mix(in srgb, var(--accent-danger) 75%, var(--border));
+}
+
+@media (max-width: 520px) {
+  .fridge-item {
+    flex-wrap: wrap;
+    gap: 8px 10px;
+  }
+  .fridge-item-name {
+    flex-basis: 100%;
+  }
+  .fridge-item-amount {
+    flex: 1;
+  }
 }
 

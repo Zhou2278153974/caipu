@@ -1,9 +1,10 @@
 // 本地存储层：基于 IndexedDB 的封装
-// 四个 store：
+// 五个 store：
 //   - recipes：菜谱（自增主键 id）
 //   - settings：键值对（keyPath = key），其中 key='api_config' 存 API 配置
 //   - recommendations：按日期存今日推荐结果（keyPath = date，YYYY-MM-DD）
 //   - preferences：用户饮食偏好标签（keyPath = id，uuid；value = 标签文字）
+//   - fridge_ingredients：冰箱食材（自增主键 id，name/amount/unit/added_at）
 //
 // 设计原则：
 //   - 所有方法返回 Promise
@@ -11,11 +12,12 @@
 //   - DB 单例，首次访问时自动打开
 
 const DB_NAME = 'personal-recipe-app';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const RECIPES_STORE = 'recipes';
 const SETTINGS_STORE = 'settings';
 const RECOMMENDATIONS_STORE = 'recommendations';
 const PREFERENCES_STORE = 'preferences';
+const FRIDGE_INGREDIENTS_STORE = 'fridge_ingredients';
 const SETTINGS_KEY_API_CONFIG = 'api_config';
 const SETTINGS_KEY_THEME = 'theme';
 export const THEME_DARK = 'dark';
@@ -47,6 +49,13 @@ export function getDb() {
         if (!db.objectStoreNames.contains(PREFERENCES_STORE)) {
           // 用户偏好标签：id（字符串uuid）、value（用户输入的偏好文字）、created_at
           db.createObjectStore(PREFERENCES_STORE, { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains(FRIDGE_INGREDIENTS_STORE)) {
+          // 冰箱食材：id（自增数字）、name（食材名）、amount（数量文本）、unit（单位）、added_at
+          db.createObjectStore(FRIDGE_INGREDIENTS_STORE, {
+            keyPath: 'id',
+            autoIncrement: true,
+          });
         }
       };
       req.onsuccess = () => resolve(req.result);
@@ -278,16 +287,104 @@ export async function clearAllPreferences() {
   await reqToPromise(tx(db, PREFERENCES_STORE, 'readwrite').clear());
 }
 
+// ============ 冰箱食材 ============
+
+/**
+ * 新增一个冰箱食材
+ * @param {{name:string, amount?:string, unit?:string}} ingredient 食材名必填（trim后非空）
+ * @returns {Promise<{id:number, name:string, amount:string, unit:string, added_at:number}>}
+ */
+export async function addFridgeIngredient(ingredient = {}) {
+  const src = ingredient && typeof ingredient === 'object' ? ingredient : {};
+  const name = String(src.name || '').trim();
+  if (!name) throw new Error('食材名不能为空');
+  const amount = String(src.amount || '').trim();
+  const unit = String(src.unit || '').trim();
+  const db = await getDb();
+  const record = { name, amount, unit, added_at: Date.now() };
+  const id = await reqToPromise(tx(db, FRIDGE_INGREDIENTS_STORE, 'readwrite').add(record));
+  return { ...record, id };
+}
+
+/**
+ * 获取全部冰箱食材，按 added_at 倒序（后加的在前）
+ * @returns {Promise<Array<{id:number, name:string, amount:string, unit:string, added_at:number}>>}
+ */
+export async function getAllFridgeIngredients() {
+  const db = await getDb();
+  const all = await reqToPromise(tx(db, FRIDGE_INGREDIENTS_STORE, 'readonly').getAll());
+  return all.sort((a, b) => b.added_at - a.added_at);
+}
+
+/** 按 id 获取单条冰箱食材，未找到返回 null */
+export async function getFridgeIngredient(id) {
+  const db = await getDb();
+  return (await reqToPromise(tx(db, FRIDGE_INGREDIENTS_STORE, 'readonly').get(id))) ?? null;
+}
+
+/**
+ * 更新冰箱食材（需带 id），食材名必填
+ * @returns {Promise<object>} 更新后的对象
+ */
+export async function updateFridgeIngredient(ingredient = {}) {
+  if (!ingredient.id) throw new Error('updateFridgeIngredient: 缺少 id');
+  const name = String(ingredient.name || '').trim();
+  if (!name) throw new Error('食材名不能为空');
+  const db = await getDb();
+  const existing = await getFridgeIngredient(ingredient.id);
+  if (!existing) throw new Error(`updateFridgeIngredient: 食材 id=${ingredient.id} 不存在`);
+  const updated = {
+    ...existing,
+    name,
+    amount: String(ingredient.amount || '').trim(),
+    unit: String(ingredient.unit || '').trim(),
+  };
+  await reqToPromise(tx(db, FRIDGE_INGREDIENTS_STORE, 'readwrite').put(updated));
+  return updated;
+}
+
+/** 按 id 删除冰箱食材，返回是否删除成功 */
+export async function deleteFridgeIngredient(id) {
+  if (id === undefined || id === null) return false;
+  const db = await getDb();
+  const existing = await getFridgeIngredient(id);
+  if (!existing) return false;
+  await reqToPromise(tx(db, FRIDGE_INGREDIENTS_STORE, 'readwrite').delete(id));
+  return true;
+}
+
+/** 清空全部冰箱食材（测试/管理用） */
+export async function clearAllFridgeIngredients() {
+  const db = await getDb();
+  await reqToPromise(tx(db, FRIDGE_INGREDIENTS_STORE, 'readwrite').clear());
+}
+
 // ============ 分组批量清除（数据管理专用） ============
 
 /**
- * ① 清除「除我的菜谱」以外的所有数据：
- *   - settings（含 API 配置）
+ * ① 仅清除菜谱数据（recipes store），其他不动
+ */
+export async function clearRecipeDataOnly() {
+  const db = await getDb();
+  await reqToPromise(tx(db, RECIPES_STORE, 'readwrite').clear());
+}
+
+/**
+ * ② 仅清除冰箱食材数据（fridge_ingredients store），其他不动
+ */
+export async function clearFridgeDataOnly() {
+  const db = await getDb();
+  await reqToPromise(tx(db, FRIDGE_INGREDIENTS_STORE, 'readwrite').clear());
+}
+
+/**
+ * ③ 仅清除「API 配置 + 偏好标签 + 今日推荐缓存」：
+ *   - settings（含 API 配置、主题等）
  *   - preferences（偏好标签）
  *   - recommendations（今日推荐缓存）
- * recipes 一条不动
+ * 保留：菜谱、冰箱食材
  */
-export async function clearDataExceptRecipes() {
+export async function clearApiPrefRecommendOnly() {
   const db = await getDb();
   const stores = [SETTINGS_STORE, PREFERENCES_STORE, RECOMMENDATIONS_STORE];
   const transaction = db.transaction(stores, 'readwrite');
@@ -297,29 +394,37 @@ export async function clearDataExceptRecipes() {
 }
 
 /**
- * ② 仅清除菜谱数据（recipes store），其他（API、偏好、推荐缓存）都不动
+ * （兼容保留）清除「除菜谱以外」的所有数据。
+ * 等价于：API 配置 / 偏好 / 推荐缓存 / 冰箱食材 全部清空。
+ * 注意：与新的三按钮模式不同，此函数会一并清掉冰箱；仍保留在导出里供历史代码使用。
  */
-export async function clearRecipeDataOnly() {
+export async function clearDataExceptRecipes() {
   const db = await getDb();
-  await reqToPromise(tx(db, RECIPES_STORE, 'readwrite').clear());
+  const stores = [SETTINGS_STORE, PREFERENCES_STORE, RECOMMENDATIONS_STORE, FRIDGE_INGREDIENTS_STORE];
+  const transaction = db.transaction(stores, 'readwrite');
+  await Promise.all(
+    stores.map((name) => reqToPromise(transaction.objectStore(name).clear()))
+  );
 }
 
 /**
  * 获取各模块当前数据量，供数据管理页展示文案用
- * @returns {Promise<{recipes:number, preferences:number, recommendations:number, hasApiConfig:boolean}>}
+ * @returns {Promise<{recipes:number, fridge:number, preferences:number, recommendations:number, hasApiConfig:boolean}>}
  */
 export async function getDataCounts() {
   const db = await getDb();
-  const stores = [RECIPES_STORE, PREFERENCES_STORE, RECOMMENDATIONS_STORE, SETTINGS_STORE];
+  const stores = [RECIPES_STORE, PREFERENCES_STORE, RECOMMENDATIONS_STORE, SETTINGS_STORE, FRIDGE_INGREDIENTS_STORE];
   const txn = db.transaction(stores, 'readonly');
-  const [recipes, preferences, recommendations, apiCfg] = await Promise.all([
+  const [recipes, preferences, recommendations, apiCfg, fridge] = await Promise.all([
     reqToPromise(txn.objectStore(RECIPES_STORE).count()),
     reqToPromise(txn.objectStore(PREFERENCES_STORE).count()),
     reqToPromise(txn.objectStore(RECOMMENDATIONS_STORE).count()),
     reqToPromise(txn.objectStore(SETTINGS_STORE).get(SETTINGS_KEY_API_CONFIG)),
+    reqToPromise(txn.objectStore(FRIDGE_INGREDIENTS_STORE).count()),
   ]);
   return {
     recipes: Number(recipes) || 0,
+    fridge: Number(fridge) || 0,
     preferences: Number(preferences) || 0,
     recommendations: Number(recommendations) || 0,
     hasApiConfig: !!(apiCfg && apiCfg.value && (apiCfg.value.api_key || apiCfg.value.base_url || apiCfg.value.model)),

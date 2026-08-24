@@ -20,7 +20,7 @@
 //   - 可测试：通过注入 services 替换 AI 调用、菜谱查询等依赖
 
 import { streamChat } from './ai-client.js';
-import { getAllRecipes, getAllPreferences } from './db.js';
+import { getAllRecipes, getAllPreferences, getAllFridgeIngredients } from './db.js';
 
 // ================== 提示词 ==================
 
@@ -90,11 +90,12 @@ const SYSTEM_PROMPT = `你是一位专业的营养师与家常菜搭配顾问，
    例如：用户说「不吃辣」→ 所有菜都不能用辣椒/辣酱/麻辣口味。
    如果存在这种"冲突但按用户要求"的搭配，请在 nutrition_note 里**用一句话向用户说明**（例如："根据你偏好高油高糖，本次推荐口味偏重，已尽量在配菜里加入少量绿叶菜平衡维生素"），这样用户知道你是按他的喜好执行。`;
 
-/** 构建用户消息（把用户菜谱库 + 偏好标签 以文字方式提供给 AI）
+/** 构建用户消息（把用户菜谱库 + 偏好标签 + 冰箱食材 以文字方式提供给 AI）
  * @param {Array} libraryRecipes 菜谱库
  * @param {string[]} preferences 用户偏好标签（纯文字数组，空数组表示没设置偏好）
+ * @param {Array<{name:string, amount?:string, unit?:string}>} [fridgeIngredients] 冰箱现有食材
  */
-function buildUserMessage(libraryRecipes, preferences = []) {
+function buildUserMessage(libraryRecipes, preferences = [], fridgeIngredients = []) {
   const safeLib = Array.isArray(libraryRecipes) ? libraryRecipes : [];
   const userPrefs = Array.isArray(preferences)
     ? preferences.map((p) => String(p || '').trim()).filter(Boolean)
@@ -108,9 +109,34 @@ ${userPrefs.map((p, i) => `${i + 1}. ${p}`).join('\n')}
 重要：若其中任何偏好与"健康、清淡、少盐少油"等通用营养原则冲突，请**完全按用户偏好执行**，不要用"不健康"为由调整，最多在 nutrition_note 里写一句"按你的偏好，本次×××，但保留了少量×××作补充"。\n\n`
       : '【用户个人偏好】：用户暂未设置任何偏好标签，请按默认的营养均衡原则搭配即可。\n\n';
 
+  // 冰箱食材块：优先级仅低于用户偏好，高于菜谱库挑选
+  const fridgeList = Array.isArray(fridgeIngredients)
+    ? fridgeIngredients
+        .map((i) => (i && i.name ? i : null))
+        .filter(Boolean)
+        .map((i) => {
+          const amount = (i.amount || '').trim();
+          const unit = (i.unit || '').trim();
+          return `${i.name}${amount || unit ? ` ${amount}${unit}` : ''}`.trim();
+        })
+        .filter(Boolean)
+    : [];
+  const fridgeBlock =
+    fridgeList.length > 0
+      ? `【冰箱现有食材（优先级：仅次于用户偏好，优先于菜谱库挑选）】
+以下是用户冰箱里目前有的食材清单，请在搭配今日三餐时**优先考虑使用这些食材**，帮助用户消耗冰箱库存、减少浪费，并据此减少重复采购（若用户偏好明确禁止某食材则除外）：
+${fridgeList.map((f, i) => `${i + 1}. ${f}`).join('\n')}
+
+\n\n`
+      : '';
+
+  const hasFridge = fridgeList.length > 0;
   let text;
   if (safeLib.length === 0) {
-    text = `${prefBlock}当前我的菜谱库里没有任何菜谱。请由你自行搭配推荐今天的一日三餐，要求健康丰富，荤素合理（除非用户偏好另有要求）。\n直接输出 JSON。`;
+    const fridgeLine = hasFridge
+      ? '请尽量使用上方【冰箱现有食材】里已有的食材，避免浪费。'
+      : '';
+    text = `${prefBlock}${fridgeBlock}当前我的菜谱库里没有任何菜谱。请由你自行搭配推荐今天的一日三餐，要求健康丰富，荤素合理（除非用户偏好另有要求）。${fridgeLine}\n直接输出 JSON。`;
   } else {
     // 只挑必要字段传给AI，节省token：id, name, intro, ingredients(只name+amount), steps, tips
     const compact = safeLib.map((r) => ({
@@ -128,17 +154,21 @@ ${userPrefs.map((p, i) => `${i + 1}. ${p}`).join('\n')}
       // 给 AI 的搭配线索：判断荤素（粗略提示，让AI更懂）
       _hint_tags: guessTags(r),
     }));
-    text = `${prefBlock}以下是我已有的菜谱库（JSON 数组），每条都有 id 字段：
+    const requirements = [
+      '1. 早餐 1～3 道菜，午餐和晚餐各 3 道菜。',
+      '2. 午餐和晚餐必须"一荤一素 + 第三道菜"（花荤/汤/其他），保证荤素搭配（用户偏好明确禁止的菜式可以例外，服从偏好）。',
+      '3. 优先从菜谱库里挑合适的菜（填入 recipe_id 和完整 recipe，from_library=true）。',
+      '4. 如果菜谱库里某餐没有合适的菜，或者为了营养均衡需要搭配新菜，就由你自行设计菜谱（recipe_id=null，from_library=false）。',
+    ];
+    if (hasFridge) requirements.push('5. 尽量优先使用上方【冰箱现有食材】里的食材（其次才是菜谱库），避免浪费。');
+    requirements.push('6. 默认注意整体营养均衡；但用户偏好永远是第一优先级。');
+    requirements.push('7. 直接按系统提示的 JSON 结构输出，每餐的菜品放在 dishes 数组里。');
+    text = `${prefBlock}${fridgeBlock}以下是我已有的菜谱库（JSON 数组），每条都有 id 字段：
 ${JSON.stringify(compact, null, 2)}
 
-请参考上面的菜谱和用户偏好，为我推荐今天的一日三餐。
+请参考上面的菜谱${hasFridge ? '、冰箱食材' : ''}和用户偏好，为我推荐今天的一日三餐。
 要求：
-1. 早餐 1～3 道菜，午餐和晚餐各 3 道菜。
-2. 午餐和晚餐必须"一荤一素 + 第三道菜"（花荤/汤/其他），保证荤素搭配（用户偏好明确禁止的菜式可以例外，服从偏好）。
-3. 优先从菜谱库里挑合适的菜（填入 recipe_id 和完整 recipe，from_library=true）。
-4. 如果菜谱库里某餐没有合适的菜，或者为了营养均衡需要搭配新菜，就由你自行设计菜谱（recipe_id=null，from_library=false）。
-5. 默认注意整体营养均衡；但用户偏好永远是第一优先级。
-6. 直接按系统提示的 JSON 结构输出，每餐的菜品放在 dishes 数组里。`;
+${requirements.join('\n')}`;
   }
   return { role: 'user', content: text };
 }
@@ -299,6 +329,7 @@ export function parseRecommendationResponse(rawText) {
  * @param {object} opts.config API 配置 {base_url, api_key, model}
  * @param {()=>Promise<Array>} [opts.getAllRecipes] 获取用户菜谱库
  * @param {()=>Promise<Array<{id:string, value:string}>>} [opts.getAllPreferences] 获取用户偏好标签
+ * @param {()=>Promise<Array>} [opts.getAllFridgeIngredients] 获取冰箱食材
  * @param {Function} [opts.streamChat] 流式聊天
  * @param {Function} [opts.onDelta] 每段 content token 回调（用于UI实时显示）
  * @param {Function} [opts.onReasoning] 思维链回调
@@ -309,26 +340,28 @@ export function parseRecommendationResponse(rawText) {
 export async function generateDailyRecommendation(opts = {}) {
   const _getAllRecipes = opts.getAllRecipes || getAllRecipes;
   const _getAllPreferences = opts.getAllPreferences || getAllPreferences;
+  const _getAllFridgeIngredients = opts.getAllFridgeIngredients || getAllFridgeIngredients;
   const _streamChat = opts.streamChat || streamChat;
   if (!opts.config) throw new Error('缺少 API 配置');
   if (!opts.config.base_url || !opts.config.api_key || !opts.config.model) {
     throw new Error('API 配置不完整');
   }
 
-  // 1. 先拿菜谱库 + 偏好标签（并行加速）
-  const [library, prefRecords] = await Promise.all([
+  // 1. 先拿菜谱库 + 偏好标签 + 冰箱食材（并行加速）
+  const [library, prefRecords, fridgeRecords] = await Promise.all([
     _getAllRecipes(),
     _getAllPreferences().catch(() => []), // 失败降级为空数组
+    _getAllFridgeIngredients().catch(() => []), // 失败降级为空数组
   ]);
   // 偏好只取 value 纯文本数组
   const preferenceValues = Array.isArray(prefRecords)
     ? prefRecords.map((p) => (p && typeof p.value === 'string' ? p.value : '')).filter(Boolean)
     : [];
 
-  // 2. 构建 messages（把偏好送入用户消息）
+  // 2. 构建 messages（把偏好 + 冰箱食材送入用户消息）
   const messages = [
     { role: 'system', content: SYSTEM_PROMPT },
-    buildUserMessage(library, preferenceValues),
+    buildUserMessage(library, preferenceValues, fridgeRecords),
   ];
 
   // 3. 流式调用 AI

@@ -901,3 +901,165 @@ describe('今日推荐 - 用户偏好注入 prompt', () => {
     });
   });
 });
+
+// =============== 新增：冰箱食材联动（优先级仅次于偏好） ===============
+describe('今日推荐 - 冰箱食材联动', () => {
+  const CONFIG = { base_url: 'https://x/v1', api_key: 'sk-1', model: 'm1' };
+
+  function makeRecipe(name = '菜', extra = {}) {
+    return {
+      name,
+      intro: '',
+      ingredients: [{ name: '鸡蛋', amount: '2个' }],
+      steps: ['第一步怎么做'],
+      tips: '',
+      ...extra,
+    };
+  }
+  function fullRecommendation() {
+    return {
+      nutrition_note: '今天有荤有素',
+      meals: {
+        breakfast: { dishes: [{ recipe_id: null, from_library: false, recipe: makeRecipe('燕麦牛奶') }] },
+        lunch: { dishes: [
+          { recipe_id: null, from_library: false, recipe: makeRecipe('A') },
+          { recipe_id: null, from_library: false, recipe: makeRecipe('B') },
+          { recipe_id: null, from_library: false, recipe: makeRecipe('C') },
+        ] },
+        dinner: { dishes: [
+          { recipe_id: null, from_library: false, recipe: makeRecipe('D') },
+          { recipe_id: null, from_library: false, recipe: makeRecipe('E') },
+          { recipe_id: null, from_library: false, recipe: makeRecipe('F') },
+        ] },
+      },
+    };
+  }
+
+  it('generateDailyRecommendation 会并行调用 getAllFridgeIngredients', async () => {
+    const getAllFridgeIngredients = vi.fn().mockResolvedValue([]);
+    const streamChat = vi.fn().mockResolvedValue({
+      content: JSON.stringify(fullRecommendation()),
+      reasoning: '',
+    });
+    await generateDailyRecommendation({
+      config: CONFIG,
+      getAllRecipes: vi.fn().mockResolvedValue([]),
+      getAllFridgeIngredients,
+      streamChat,
+    });
+    expect(getAllFridgeIngredients).toHaveBeenCalledTimes(1);
+  });
+
+  it('有冰箱食材：user message 包含冰箱块标题、编号列表与"仅次于用户偏好"优先级声明', async () => {
+    const fridgeRecords = [
+      { id: 1, name: '排骨', amount: '2', unit: '斤' },
+      { id: 2, name: '白菜', amount: '1', unit: '棵' },
+    ];
+    const streamChat = vi.fn().mockResolvedValue({
+      content: JSON.stringify(fullRecommendation()),
+      reasoning: '',
+    });
+    await generateDailyRecommendation({
+      config: CONFIG,
+      getAllRecipes: vi.fn().mockResolvedValue([]),
+      getAllPreferences: vi.fn().mockResolvedValue([]),
+      getAllFridgeIngredients: vi.fn().mockResolvedValue(fridgeRecords),
+      streamChat,
+    });
+    const messages = streamChat.mock.calls[0][1];
+    const userText = typeof messages[1].content === 'string' ? messages[1].content : '';
+    // 冰箱块标题与优先级
+    expect(userText).toContain('冰箱现有食材');
+    expect(userText).toContain('仅次于用户偏好');
+    expect(userText).toContain('优先于菜谱库挑选');
+    // 食材逐条列出（含数量单位）
+    expect(userText).toMatch(/1\.\s*排骨\s*2斤/);
+    expect(userText).toMatch(/2\.\s*白菜\s*1棵/);
+  });
+
+  it('冰箱为空：不出现冰箱食材块（user message 无「冰箱现有食材」）', async () => {
+    const streamChat = vi.fn().mockResolvedValue({
+      content: JSON.stringify(fullRecommendation()),
+      reasoning: '',
+    });
+    await generateDailyRecommendation({
+      config: CONFIG,
+      getAllRecipes: vi.fn().mockResolvedValue([]),
+      getAllPreferences: vi.fn().mockResolvedValue([]),
+      getAllFridgeIngredients: vi.fn().mockResolvedValue([]),
+      streamChat,
+    });
+    const userText = streamChat.mock.calls[0][1][1].content;
+    expect(userText).not.toContain('冰箱现有食材');
+    expect(userText).not.toContain('冰箱');
+  });
+
+  it('冰箱含脏数据（无 name / 全空字段）→ 只保留有效食材', async () => {
+    const fridgeRecords = [
+      { id: 1, name: '排骨', amount: '2', unit: '斤' },
+      { id: 2, name: '', amount: '', unit: '' },          // 无 name → 过滤
+      { id: 3, name: null, amount: '1', unit: '盒' },     // name null → 过滤
+      { id: 4, name: '  白菜  ', amount: '  1 ', unit: ' 棵 ' }, // trim 后有效
+      { id: 5, name: '鸡蛋' },                             // 只有 name，无数量单位 → 保留为纯名称
+    ];
+    const streamChat = vi.fn().mockResolvedValue({
+      content: JSON.stringify(fullRecommendation()),
+      reasoning: '',
+    });
+    await generateDailyRecommendation({
+      config: CONFIG,
+      getAllRecipes: vi.fn().mockResolvedValue([]),
+      getAllPreferences: vi.fn().mockResolvedValue([]),
+      getAllFridgeIngredients: vi.fn().mockResolvedValue(fridgeRecords),
+      streamChat,
+    });
+    const userText = streamChat.mock.calls[0][1][1].content;
+    expect(userText).toMatch(/1\.\s*排骨\s*2斤/);
+    expect(userText).toMatch(/2\.\s*白菜\s*1棵/);
+    expect(userText).toMatch(/3\.\s*鸡蛋/);
+    // 脏数据不应出现
+    expect(userText).not.toContain('null');
+    expect(userText).not.toContain('undefined');
+  });
+
+  it('getAllFridgeIngredients 抛错时降级为空数组，不影响推荐流程', async () => {
+    const streamChat = vi.fn().mockResolvedValue({
+      content: JSON.stringify(fullRecommendation()),
+      reasoning: '',
+    });
+    const getFridge = vi.fn().mockRejectedValue(new Error('fridge store 不存在'));
+    const result = await generateDailyRecommendation({
+      config: CONFIG,
+      getAllRecipes: vi.fn().mockResolvedValue([]),
+      getAllPreferences: vi.fn().mockResolvedValue([]),
+      getAllFridgeIngredients: getFridge,
+      streamChat,
+    });
+    expect(getFridge).toHaveBeenCalledTimes(1);
+    expect(result.meals.breakfast.dishes[0].recipe.name).toBe('燕麦牛奶');
+    // 降级为空数组 → 用户消息里没有冰箱块
+    const userText = streamChat.mock.calls[0][1][1].content;
+    expect(userText).not.toContain('冰箱现有食材');
+  });
+
+  it('冰箱 + 偏好同时存在：偏好块在前、冰箱块在后、菜谱块最后（优先级顺序）', async () => {
+    const streamChat = vi.fn().mockResolvedValue({
+      content: JSON.stringify(fullRecommendation()),
+      reasoning: '',
+    });
+    await generateDailyRecommendation({
+      config: CONFIG,
+      getAllRecipes: vi.fn().mockResolvedValue([]),
+      getAllPreferences: vi.fn().mockResolvedValue([{ id: 'p1', value: '不吃辣', created_at: 1 }]),
+      getAllFridgeIngredients: vi.fn().mockResolvedValue([{ id: 1, name: '排骨', amount: '', unit: '' }]),
+      streamChat,
+    });
+    const userText = streamChat.mock.calls[0][1][1].content;
+    // 顺序：偏好块 > 冰箱块（优先级：偏好最高，冰箱其次）
+    const prefIdx = userText.indexOf('用户个人偏好');
+    const fridgeIdx = userText.indexOf('冰箱现有食材');
+    expect(prefIdx).toBeGreaterThan(-1);
+    expect(fridgeIdx).toBeGreaterThan(-1);
+    expect(prefIdx).toBeLessThan(fridgeIdx);
+  });
+});

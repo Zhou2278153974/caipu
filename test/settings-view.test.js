@@ -75,13 +75,14 @@ describe('设置页 - 一级首页（四分类）', () => {
     expect(c.querySelector('#pref-list')).toBeTruthy();
   });
 
-  it('点「数据管理」卡片 → 进入二级页，出现返回按钮 + 两个清除区块 + 确认弹框结构', () => {
+  it('点「数据管理」卡片 → 进入二级页，出现返回按钮 + 三个清除区块 + 确认弹框结构', () => {
     const c = mount();
     enterCategory(c, 'data-mgmt');
     expect(c.querySelector('.btn-back')).toBeTruthy();
     expect(c.querySelector('#data-mgmt-counts')).toBeTruthy();
-    expect(c.querySelector('#btn-clear-except-recipes')).toBeTruthy();
     expect(c.querySelector('#btn-clear-recipes')).toBeTruthy();
+    expect(c.querySelector('#btn-clear-fridge')).toBeTruthy();
+    expect(c.querySelector('#btn-clear-api-pref-rec')).toBeTruthy();
     expect(c.querySelector('#confirm-modal')).toBeTruthy();
     expect(c.querySelector('#confirm-ok')).toBeTruthy();
     expect(c.querySelector('#confirm-cancel')).toBeTruthy();
@@ -550,9 +551,10 @@ describe('设置页 - 二级：偏好设置', () => {
 
 // ============ 二级：数据管理 ============
 describe('设置页 - 二级：数据管理', () => {
-  it('进入数据管理页后调用 getDataCounts，并把数字渲染到统计框', async () => {
+  it('进入数据管理页后调用 getDataCounts，并把数字渲染到统计框（含冰箱数量）', async () => {
     const getDataCounts = vi.fn().mockResolvedValue({
       recipes: 12,
+      fridge: 8,
       preferences: 3,
       recommendations: 7,
       hasApiConfig: true,
@@ -563,6 +565,7 @@ describe('设置页 - 二级：数据管理', () => {
     expect(getDataCounts).toHaveBeenCalledTimes(1);
     const box = c.querySelector('#data-mgmt-counts').textContent;
     expect(box).toContain('12'); // 菜谱数
+    expect(box).toContain('8');  // 冰箱数
     expect(box).toContain('3');  // 偏好数
     expect(box).toContain('7');  // 推荐缓存天数
     expect(box).toContain('已配置'); // API
@@ -576,64 +579,34 @@ describe('设置页 - 二级：数据管理', () => {
     expect(c.querySelector('#data-mgmt-counts').textContent).toContain('统计失败');
   });
 
-  it('两个清除按钮文字正确，级别区分（btn-warn vs btn-danger）', async () => {
-    const c = mount({ getDataCounts: vi.fn().mockResolvedValue({ recipes: 0, preferences: 0, recommendations: 0, hasApiConfig: false }) });
+  it('页面出现三个清除按钮：菜谱 / 冰箱 / API+偏好+推荐缓存，按钮级别匹配（danger vs warn）', async () => {
+    const c = mount({ getDataCounts: vi.fn().mockResolvedValue({ recipes: 0, fridge: 0, preferences: 0, recommendations: 0, hasApiConfig: false }) });
     enterCategory(c, 'data-mgmt');
     await flush();
-    const btnExcept = c.querySelector('#btn-clear-except-recipes');
     const btnRecipes = c.querySelector('#btn-clear-recipes');
-    expect(btnExcept.textContent).toContain('清除除菜谱外');
+    const btnFridge = c.querySelector('#btn-clear-fridge');
+    const btnApi = c.querySelector('#btn-clear-api-pref-rec');
+    expect(btnRecipes).toBeTruthy();
+    expect(btnFridge).toBeTruthy();
+    expect(btnApi).toBeTruthy();
     expect(btnRecipes.textContent).toContain('清除所有菜谱');
-    expect(btnExcept.classList.contains('btn-warn')).toBe(true);
+    expect(btnFridge.textContent).toContain('清空冰箱');
+    expect(btnApi.textContent).toContain('清除 API');
     expect(btnRecipes.classList.contains('btn-danger')).toBe(true);
+    expect(btnFridge.classList.contains('btn-danger')).toBe(true);
+    expect(btnApi.classList.contains('btn-warn')).toBe(true);
   });
 
-  it('点「清除除菜谱外的数据」→ 弹二次确认；确认后调用 clearDataExceptRecipes，并刷新计数', async () => {
-    const clearDataExceptRecipes = vi.fn().mockResolvedValue();
-    const getDataCounts = vi
-      .fn()
-      // ① 进入页面：refreshCounts 首次
-      .mockResolvedValueOnce({ recipes: 5, preferences: 2, recommendations: 3, hasApiConfig: true })
-      // ② 点清除按钮：click handler 内部 await injected.getDataCounts() 拼弹框文案
-      .mockResolvedValueOnce({ recipes: 5, preferences: 2, recommendations: 3, hasApiConfig: true })
-      // ③ 确认后 onOK 内 refreshCounts 刷新
-      .mockResolvedValueOnce({ recipes: 5, preferences: 0, recommendations: 0, hasApiConfig: false });
-    const c = mount({ clearDataExceptRecipes, getDataCounts });
-    enterCategory(c, 'data-mgmt');
-    await flush();
-
-    // 点击清除按钮
-    c.querySelector('#btn-clear-except-recipes').click();
-    await flush();
-    // 弹框出现
-    const modal = c.querySelector('#confirm-modal');
-    expect(modal.hidden).toBe(false);
-    expect(c.querySelector('#confirm-title').textContent).toContain('除菜谱外');
-    expect(c.querySelector('#confirm-desc').textContent).toContain('不可恢复');
-
-    // 点确认
-    c.querySelector('#confirm-ok').click();
-    await flush();
-    expect(clearDataExceptRecipes).toHaveBeenCalledTimes(1);
-    // 弹框关闭
-    expect(modal.hidden).toBe(true);
-    // 状态成功
-    expect(c.querySelector('#data-mgmt-status').className).toContain('status-success');
-    expect(c.querySelector('#data-mgmt-status').textContent).toContain('菜谱已保留');
-    // 调用了 3 次 getDataCounts（进入 + 按钮弹框计数 + 确认后刷新）
-    expect(getDataCounts).toHaveBeenCalledTimes(3);
-  });
-
-  it('点「清除所有菜谱」→ 弹框 danger 级别（确认按钮是 btn-danger）；确认后调用 clearRecipeDataOnly', async () => {
+  it('点「清除所有菜谱」→ 弹二次确认（danger）；确认后调用 clearRecipeDataOnly，并刷新计数', async () => {
     const clearRecipeDataOnly = vi.fn().mockResolvedValue();
     const getDataCounts = vi
       .fn()
-      // ① 进入页面：refreshCounts 首次（10 条菜谱）
-      .mockResolvedValueOnce({ recipes: 10, preferences: 1, recommendations: 2, hasApiConfig: true })
-      // ② 点按钮：click handler 内部再调一次，用来弹框显示"当前 n 条"
-      .mockResolvedValueOnce({ recipes: 10, preferences: 1, recommendations: 2, hasApiConfig: true })
-      // ③ 确认后：刷新计数，菜谱变 0
-      .mockResolvedValueOnce({ recipes: 0, preferences: 1, recommendations: 2, hasApiConfig: true });
+      // ① 进入页面：refreshCounts 首次
+      .mockResolvedValueOnce({ recipes: 10, fridge: 5, preferences: 1, recommendations: 2, hasApiConfig: true })
+      // ② 点清除按钮：click handler 内部 await injected.getDataCounts() 拼弹框文案
+      .mockResolvedValueOnce({ recipes: 10, fridge: 5, preferences: 1, recommendations: 2, hasApiConfig: true })
+      // ③ 确认后 onOK 内 refreshCounts 刷新（菜谱变 0）
+      .mockResolvedValueOnce({ recipes: 0, fridge: 5, preferences: 1, recommendations: 2, hasApiConfig: true });
     const c = mount({ clearRecipeDataOnly, getDataCounts });
     enterCategory(c, 'data-mgmt');
     await flush();
@@ -642,7 +615,9 @@ describe('设置页 - 二级：数据管理', () => {
     await flush();
     const modal = c.querySelector('#confirm-modal');
     expect(modal.hidden).toBe(false);
-    // 按钮是 btn-danger 级
+    expect(c.querySelector('#confirm-title').textContent).toContain('清除所有菜谱');
+    expect(c.querySelector('#confirm-desc').textContent).toContain('10 条菜谱');
+
     const okBtn = c.querySelector('#confirm-ok');
     expect(okBtn.classList.contains('btn-danger')).toBe(true);
     expect(okBtn.textContent).toContain('不可恢复');
@@ -651,19 +626,81 @@ describe('设置页 - 二级：数据管理', () => {
     await flush();
     expect(clearRecipeDataOnly).toHaveBeenCalledTimes(1);
     expect(modal.hidden).toBe(true);
-    // 弹框文案用的是第 2 次 getDataCounts 的值（recipes=10）
+    expect(c.querySelector('#data-mgmt-status').className).toContain('status-success');
     expect(c.querySelector('#data-mgmt-status').textContent).toContain('已清除全部 10 条菜谱');
+    expect(getDataCounts).toHaveBeenCalledTimes(3);
   });
 
-  it('二次确认弹框：点取消 / 点遮罩 → 关闭弹框，不调用清除函数', async () => {
-    const clearRecipeDataOnly = vi.fn().mockResolvedValue();
-    const clearDataExceptRecipes = vi.fn().mockResolvedValue();
-    const getDataCounts = vi.fn().mockResolvedValue({ recipes: 1, preferences: 1, recommendations: 1, hasApiConfig: false });
-    const c = mount({ clearRecipeDataOnly, clearDataExceptRecipes, getDataCounts });
+  it('点「清空冰箱」→ 弹二次确认（danger）；确认后调用 clearFridgeDataOnly，并刷新计数', async () => {
+    const clearFridgeDataOnly = vi.fn().mockResolvedValue();
+    const getDataCounts = vi
+      .fn()
+      .mockResolvedValueOnce({ recipes: 3, fridge: 24, preferences: 2, recommendations: 1, hasApiConfig: false })
+      .mockResolvedValueOnce({ recipes: 3, fridge: 24, preferences: 2, recommendations: 1, hasApiConfig: false })
+      .mockResolvedValueOnce({ recipes: 3, fridge: 0, preferences: 2, recommendations: 1, hasApiConfig: false });
+    const c = mount({ clearFridgeDataOnly, getDataCounts });
     enterCategory(c, 'data-mgmt');
     await flush();
 
-    // ① 点清除菜谱 → 点取消
+    c.querySelector('#btn-clear-fridge').click();
+    await flush();
+    const modal = c.querySelector('#confirm-modal');
+    expect(modal.hidden).toBe(false);
+    expect(c.querySelector('#confirm-title').textContent).toContain('清空冰箱');
+    expect(c.querySelector('#confirm-desc').textContent).toContain('24 种食材');
+    expect(c.querySelector('#confirm-ok').classList.contains('btn-danger')).toBe(true);
+
+    c.querySelector('#confirm-ok').click();
+    await flush();
+    expect(clearFridgeDataOnly).toHaveBeenCalledTimes(1);
+    expect(modal.hidden).toBe(true);
+    expect(c.querySelector('#data-mgmt-status').textContent).toContain('已清空冰箱（24 种食材）');
+    expect(getDataCounts).toHaveBeenCalledTimes(3);
+  });
+
+  it('点「清除 API / 偏好 / 推荐缓存」→ 弹确认（warn 级别）；确认后调用 clearApiPrefRecommendOnly，并刷新计数', async () => {
+    const clearApiPrefRecommendOnly = vi.fn().mockResolvedValue();
+    const getDataCounts = vi
+      .fn()
+      .mockResolvedValueOnce({ recipes: 5, fridge: 6, preferences: 2, recommendations: 3, hasApiConfig: true })
+      .mockResolvedValueOnce({ recipes: 5, fridge: 6, preferences: 2, recommendations: 3, hasApiConfig: true })
+      .mockResolvedValueOnce({ recipes: 5, fridge: 6, preferences: 0, recommendations: 0, hasApiConfig: false });
+    const c = mount({ clearApiPrefRecommendOnly, getDataCounts });
+    enterCategory(c, 'data-mgmt');
+    await flush();
+
+    c.querySelector('#btn-clear-api-pref-rec').click();
+    await flush();
+    const modal = c.querySelector('#confirm-modal');
+    expect(modal.hidden).toBe(false);
+    expect(c.querySelector('#confirm-title').textContent).toContain('API / 偏好 / 推荐缓存');
+    const desc = c.querySelector('#confirm-desc').textContent;
+    expect(desc).toContain('2 个偏好标签');
+    expect(desc).toContain('3 天的今日推荐缓存');
+    expect(desc).toContain('菜谱与冰箱食材不会被删除');
+    const okBtn = c.querySelector('#confirm-ok');
+    expect(okBtn.classList.contains('btn-warn')).toBe(true);
+    expect(okBtn.classList.contains('btn-danger')).toBe(false);
+
+    okBtn.click();
+    await flush();
+    expect(clearApiPrefRecommendOnly).toHaveBeenCalledTimes(1);
+    expect(modal.hidden).toBe(true);
+    expect(c.querySelector('#data-mgmt-status').className).toContain('status-success');
+    expect(c.querySelector('#data-mgmt-status').textContent).toContain('菜谱与冰箱已保留');
+    expect(getDataCounts).toHaveBeenCalledTimes(3);
+  });
+
+  it('二次确认弹框：三个按钮分别点取消 / 点遮罩 → 关闭弹框，不调用任何清除函数', async () => {
+    const clearRecipeDataOnly = vi.fn().mockResolvedValue();
+    const clearFridgeDataOnly = vi.fn().mockResolvedValue();
+    const clearApiPrefRecommendOnly = vi.fn().mockResolvedValue();
+    const getDataCounts = vi.fn().mockResolvedValue({ recipes: 1, fridge: 1, preferences: 1, recommendations: 1, hasApiConfig: false });
+    const c = mount({ clearRecipeDataOnly, clearFridgeDataOnly, clearApiPrefRecommendOnly, getDataCounts });
+    enterCategory(c, 'data-mgmt');
+    await flush();
+
+    // ① 菜谱 → 取消
     c.querySelector('#btn-clear-recipes').click();
     await flush();
     expect(c.querySelector('#confirm-modal').hidden).toBe(false);
@@ -672,14 +709,23 @@ describe('设置页 - 二级：数据管理', () => {
     expect(c.querySelector('#confirm-modal').hidden).toBe(true);
     expect(clearRecipeDataOnly).not.toHaveBeenCalled();
 
-    // ② 点清除除菜谱外 → 点弹框遮罩（overlay 区域）
-    c.querySelector('#btn-clear-except-recipes').click();
+    // ② 冰箱 → 点弹框遮罩关闭
+    c.querySelector('#btn-clear-fridge').click();
     await flush();
     expect(c.querySelector('#confirm-modal').hidden).toBe(false);
-    c.querySelector('#confirm-modal').click(); // 点遮罩（target === overlay）
+    c.querySelector('#confirm-modal').click(); // 点遮罩
     await flush();
     expect(c.querySelector('#confirm-modal').hidden).toBe(true);
-    expect(clearDataExceptRecipes).not.toHaveBeenCalled();
+    expect(clearFridgeDataOnly).not.toHaveBeenCalled();
+
+    // ③ API/偏好/推荐 → 取消
+    c.querySelector('#btn-clear-api-pref-rec').click();
+    await flush();
+    expect(c.querySelector('#confirm-modal').hidden).toBe(false);
+    c.querySelector('#confirm-cancel').click();
+    await flush();
+    expect(c.querySelector('#confirm-modal').hidden).toBe(true);
+    expect(clearApiPrefRecommendOnly).not.toHaveBeenCalled();
   });
 });
 

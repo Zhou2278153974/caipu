@@ -1,12 +1,14 @@
-// 应用主框架：顶部导航 + 三个视图（菜谱 / 今日推荐 / 设置）
+// 应用主框架：顶部导航 + 视图（菜谱 / 今日推荐 / 我的冰箱 / 设置）
 import { renderRecipesView } from './views/recipes.js';
 import { renderSettingsView } from './views/settings.js';
 import { renderRecommendView } from './views/recommend.js';
+import { renderFridgeView } from './views/fridge.js';
 import { getTheme, saveTheme, THEME_DARK, THEME_LIGHT, DEFAULT_THEME } from './db.js';
 
 const VIEWS = {
   recipes: { label: '菜谱', render: renderRecipesView },
   recommend: { label: '今日推荐', render: renderRecommendView },
+  fridge: { label: '我的冰箱', render: renderFridgeView },
   settings: { label: '设置', render: renderSettingsView },
 };
 
@@ -122,6 +124,9 @@ export function mountApp(rootEl) {
             </button>
             <button class="nav-menu-item ${currentView === 'recommend' ? 'active' : ''}" data-view="recommend" type="button">
               <span class="nav-menu-icon">🍱</span>今日推荐
+            </button>
+            <button class="nav-menu-item ${currentView === 'fridge' ? 'active' : ''}" data-view="fridge" type="button">
+              <span class="nav-menu-icon">🧊</span>我的冰箱
             </button>
             <button class="nav-menu-item ${currentView === 'settings' ? 'active' : ''}" data-view="settings" type="button">
               <span class="nav-menu-icon">⚙</span>设置

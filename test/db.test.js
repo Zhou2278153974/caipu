@@ -29,6 +29,13 @@ import {
   saveRecommendation,
   getRecommendation,
   getTodayKey,
+  // 新增：冰箱食材
+  addFridgeIngredient,
+  getAllFridgeIngredients,
+  getFridgeIngredient,
+  updateFridgeIngredient,
+  deleteFridgeIngredient,
+  clearAllFridgeIngredients,
 } from '../src/db.js';
 
 beforeEach(async () => {
@@ -37,6 +44,7 @@ beforeEach(async () => {
   await clearAllRecipes().catch(() => {});
   await clearAllSettings().catch(() => {});
   await clearAllPreferences().catch(() => {});
+  await clearAllFridgeIngredients().catch(() => {});
 });
 
 describe('存储层 - 菜谱 CRUD', () => {
@@ -236,6 +244,90 @@ describe('存储层 - 主题', () => {
     expect(await getTheme()).toBe(THEME_LIGHT);
     await clearAllSettings();
     expect(await getTheme()).toBe(DEFAULT_THEME);
+  });
+});
+
+// ============ 新增：冰箱食材 ============
+describe('存储层 - 冰箱食材 CRUD', () => {
+  it('初始为空数组', async () => {
+    expect(await getAllFridgeIngredients()).toEqual([]);
+  });
+
+  it('addFridgeIngredient 返回自增 id 与 added_at，字段已 trim', async () => {
+    const r = await addFridgeIngredient({ name: '  排骨  ', amount: ' 2 ', unit: ' 斤 ' });
+    expect(r.id).toBeTypeOf('number');
+    expect(r.id).toBeGreaterThan(0);
+    expect(r.name).toBe('排骨');
+    expect(r.amount).toBe('2');
+    expect(r.unit).toBe('斤');
+    expect(r.added_at).toBeTypeOf('number');
+    expect(r.added_at).toBeGreaterThan(0);
+  });
+
+  it('食材名为空/全空格 → 抛错', async () => {
+    await expect(addFridgeIngredient({ name: '' })).rejects.toThrow(/不能为空/);
+    await expect(addFridgeIngredient({ name: '   ' })).rejects.toThrow(/不能为空/);
+    await expect(addFridgeIngredient({})).rejects.toThrow(/不能为空/);
+    await expect(addFridgeIngredient(null)).rejects.toThrow(/不能为空/);
+  });
+
+  it('多条食材 id 自增；getAllFridgeIngredients 按 added_at 倒序（后加的在前）', async () => {
+    const a = await addFridgeIngredient({ name: 'A' });
+    await new Promise((res) => setTimeout(res, 3));
+    const b = await addFridgeIngredient({ name: 'B' });
+    expect(b.id).toBeGreaterThan(a.id);
+    const all = await getAllFridgeIngredients();
+    expect(all.map((i) => i.name)).toEqual(['B', 'A']);
+  });
+
+  it('getFridgeIngredient 命中返回对象，未命中返回 null', async () => {
+    const r = await addFridgeIngredient({ name: '白菜' });
+    expect((await getFridgeIngredient(r.id)).name).toBe('白菜');
+    expect(await getFridgeIngredient(99999)).toBeNull();
+  });
+
+  it('updateFridgeIngredient 更新字段，保留 id/added_at', async () => {
+    const r = await addFridgeIngredient({ name: '土豆', amount: '1', unit: '斤' });
+    const updated = await updateFridgeIngredient({ id: r.id, name: '土豆', amount: '2', unit: '个' });
+    expect(updated.name).toBe('土豆');
+    expect(updated.amount).toBe('2');
+    expect(updated.unit).toBe('个');
+    expect(updated.id).toBe(r.id);
+    expect(updated.added_at).toBe(r.added_at);
+    expect((await getFridgeIngredient(r.id)).amount).toBe('2');
+  });
+
+  it('updateFridgeIngredient 缺少 id 抛错；目标不存在抛错', async () => {
+    await expect(updateFridgeIngredient({ name: 'X' })).rejects.toThrow(/缺少 id/);
+    await expect(updateFridgeIngredient({ id: 999, name: 'X' })).rejects.toThrow(/不存在/);
+  });
+
+  it('deleteFridgeIngredient 存在则删除返回 true，不存在返回 false', async () => {
+    const r = await addFridgeIngredient({ name: '番茄' });
+    expect(await deleteFridgeIngredient(r.id)).toBe(true);
+    expect(await getFridgeIngredient(r.id)).toBeNull();
+    expect(await deleteFridgeIngredient(r.id)).toBe(false);
+    expect(await deleteFridgeIngredient(undefined)).toBe(false);
+    expect(await deleteFridgeIngredient(null)).toBe(false);
+  });
+
+  it('clearAllFridgeIngredients 清空全部', async () => {
+    await addFridgeIngredient({ name: 'A' });
+    await addFridgeIngredient({ name: 'B' });
+    expect(await getAllFridgeIngredients()).toHaveLength(2);
+    await clearAllFridgeIngredients();
+    expect(await getAllFridgeIngredients()).toEqual([]);
+  });
+
+  it('冰箱数据独立于菜谱库（互不影响）', async () => {
+    await createRecipe({ name: '菜谱菜' });
+    await addFridgeIngredient({ name: '冰箱菜' });
+    const recipes = await getAllRecipes();
+    const fridge = await getAllFridgeIngredients();
+    expect(recipes).toHaveLength(1);
+    expect(recipes[0].name).toBe('菜谱菜');
+    expect(fridge).toHaveLength(1);
+    expect(fridge[0].name).toBe('冰箱菜');
   });
 });
 

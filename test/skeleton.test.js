@@ -23,12 +23,13 @@ describe('阶段0：应用骨架', () => {
     expect(root.querySelector('.app-title').textContent).toBe('吃什么');
     // 下拉按钮存在
     expect(root.querySelector('#nav-toggle')).toBeTruthy();
-    // 菜单项有三个：菜谱 / 今日推荐 / 设置
+    // 菜单项有四个：菜谱 / 今日推荐 / 我的冰箱 / 设置
     const items = root.querySelectorAll('.nav-menu-item');
-    expect(items.length).toBe(3);
+    expect(items.length).toBe(4);
     expect(items[0].dataset.view).toBe('recipes');
     expect(items[1].dataset.view).toBe('recommend');
-    expect(items[2].dataset.view).toBe('settings');
+    expect(items[2].dataset.view).toBe('fridge');
+    expect(items[3].dataset.view).toBe('settings');
     // 不再有旧的并排 nav-btn
     expect(root.querySelectorAll('.nav-btn').length).toBe(0);
   });

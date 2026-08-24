@@ -13,8 +13,9 @@ import {
   getAllPreferences,
   addPreference,
   removePreference,
-  clearDataExceptRecipes,
   clearRecipeDataOnly,
+  clearFridgeDataOnly,
+  clearApiPrefRecommendOnly,
   getDataCounts,
   getTheme as _dbGetTheme,
   saveTheme as _dbSaveTheme,
@@ -34,8 +35,11 @@ export function renderSettingsView(container, services = {}) {
     getAllPreferences: services.getAllPreferences || getAllPreferences,
     addPreference: services.addPreference || addPreference,
     removePreference: services.removePreference || removePreference,
-    clearDataExceptRecipes: services.clearDataExceptRecipes || clearDataExceptRecipes,
     clearRecipeDataOnly: services.clearRecipeDataOnly || clearRecipeDataOnly,
+    clearFridgeDataOnly: services.clearFridgeDataOnly || clearFridgeDataOnly,
+    clearApiPrefRecommendOnly: services.clearApiPrefRecommendOnly || clearApiPrefRecommendOnly,
+    // 以下兼容：旧测试/代码可能仍在使用 clearDataExceptRecipes，保持注入但 UI 不再主动调用
+    clearDataExceptRecipes: services.clearDataExceptRecipes || null,
     getDataCounts: services.getDataCounts || getDataCounts,
     getTheme: services.getTheme || _dbGetTheme,
     saveTheme: services.saveTheme || _dbSaveTheme,
@@ -104,7 +108,7 @@ export function renderSettingsView(container, services = {}) {
             <div class="settings-category-icon">🗂️</div>
             <div class="settings-category-body">
               <div class="settings-category-title">数据管理</div>
-              <div class="settings-category-desc">分组清除数据：可清空菜谱，或清空 API / 偏好 / 推荐缓存而保留菜谱。</div>
+              <div class="settings-category-desc">分组清除数据：菜谱 / 冰箱 / API 配置 & 偏好 & 今日推荐缓存，分别独立清除。</div>
             </div>
             <div class="settings-category-arrow">›</div>
           </button>
@@ -471,7 +475,7 @@ export function renderSettingsView(container, services = {}) {
     });
   }
 
-  // ============ 二级：数据管理（两个清除分组 + 二次确认） ============
+  // ============ 二级：数据管理（三个清除分组 + 二次确认） ============
   function renderDataMgmtPage() {
     container.innerHTML = `
       <section class="settings-view">
@@ -481,25 +485,36 @@ export function renderSettingsView(container, services = {}) {
 
         <div id="data-mgmt-counts" class="data-counts-box">正在统计数据量…</div>
 
-        <div class="data-clear-section data-clear-warn">
-          <h3 class="settings-subtitle">① 清除「除菜谱以外」的所有数据</h3>
+        <div class="data-clear-section data-clear-danger">
+          <h3 class="settings-subtitle">① 清除菜谱数据（危险操作）</h3>
           <p class="data-clear-desc">
-            范围：<strong>API 配置</strong>（Base URL / Key / 模型名）＋ <strong>偏好标签</strong> ＋ <strong>今日推荐缓存</strong>（按日期存的三餐）。
+            范围：<strong>我的菜谱里的全部菜谱</strong>，所有菜谱将被永久删除。
           </p>
-          <p class="data-clear-desc data-clear-keep">保留：我的菜谱里的全部菜谱，一条都不会动。</p>
+          <p class="data-clear-desc data-clear-keep">保留：冰箱食材、API 配置、偏好标签、今日推荐缓存、主题设置。</p>
           <div class="data-clear-actions">
-            <button id="btn-clear-except-recipes" class="btn btn-warn" type="button">清除除菜谱外的数据</button>
+            <button id="btn-clear-recipes" class="btn btn-danger" type="button">⚠ 清除所有菜谱</button>
           </div>
         </div>
 
         <div class="data-clear-section data-clear-danger">
-          <h3 class="settings-subtitle">② 清除菜谱数据（危险操作）</h3>
+          <h3 class="settings-subtitle">② 清除冰箱数据（危险操作）</h3>
           <p class="data-clear-desc">
-            范围：<strong>我的菜谱里的全部菜谱</strong>，所有菜谱将被永久删除。
+            范围：<strong>我的冰箱里的所有食材</strong>，全部食材将被永久删除。
           </p>
-          <p class="data-clear-desc data-clear-keep">保留：API 配置、偏好标签、今日推荐缓存。</p>
+          <p class="data-clear-desc data-clear-keep">保留：我的菜谱、API 配置、偏好标签、今日推荐缓存、主题设置。</p>
           <div class="data-clear-actions">
-            <button id="btn-clear-recipes" class="btn btn-danger" type="button">⚠ 清除所有菜谱</button>
+            <button id="btn-clear-fridge" class="btn btn-danger" type="button">⚠ 清空冰箱</button>
+          </div>
+        </div>
+
+        <div class="data-clear-section data-clear-warn">
+          <h3 class="settings-subtitle">③ 清除 API 配置 + 偏好标签 + 今日推荐缓存</h3>
+          <p class="data-clear-desc">
+            范围：<strong>API 配置</strong>（Base URL / Key / 模型名）＋ <strong>偏好标签</strong> ＋ <strong>今日推荐缓存</strong>（按日期存的三餐）＋ <strong>主题设置</strong>（一起存放在 settings 表中）。
+          </p>
+          <p class="data-clear-desc data-clear-keep">保留：我的菜谱、我的冰箱食材。</p>
+          <div class="data-clear-actions">
+            <button id="btn-clear-api-pref-rec" class="btn btn-warn" type="button">清除 API / 偏好 / 推荐缓存</button>
           </div>
         </div>
 
@@ -522,8 +537,9 @@ export function renderSettingsView(container, services = {}) {
 
     const $counts = container.querySelector('#data-mgmt-counts');
     const $status = container.querySelector('#data-mgmt-status');
-    const $btnClearExcept = container.querySelector('#btn-clear-except-recipes');
     const $btnClearRecipes = container.querySelector('#btn-clear-recipes');
+    const $btnClearFridge = container.querySelector('#btn-clear-fridge');
+    const $btnClearApi = container.querySelector('#btn-clear-api-pref-rec');
     const $modal = container.querySelector('#confirm-modal');
     const $modalTitle = container.querySelector('#confirm-title');
     const $modalDesc = container.querySelector('#confirm-desc');
@@ -542,6 +558,7 @@ export function renderSettingsView(container, services = {}) {
         const c = await injected.getDataCounts();
         $counts.innerHTML = `
           <div class="data-count-row"><span class="data-count-label">📑 我的菜谱</span><span class="data-count-value"><strong>${c.recipes}</strong> 条</span></div>
+          <div class="data-count-row"><span class="data-count-label">🧊 我的冰箱</span><span class="data-count-value"><strong>${c.fridge}</strong> 种</span></div>
           <div class="data-count-row"><span class="data-count-label">🍽️ 偏好标签</span><span class="data-count-value"><strong>${c.preferences}</strong> 个</span></div>
           <div class="data-count-row"><span class="data-count-label">🍱 今日推荐缓存</span><span class="data-count-value"><strong>${c.recommendations}</strong> 天</span></div>
           <div class="data-count-row"><span class="data-count-label">🔑 API 配置</span><span class="data-count-value"><strong>${c.hasApiConfig ? '已配置' : '未配置'}</strong></span></div>
@@ -581,33 +598,48 @@ export function renderSettingsView(container, services = {}) {
       }
     });
 
-    $btnClearExcept.addEventListener('click', async () => {
-      const c = await injected.getDataCounts().catch(() => ({}));
-      const prefN = Number(c.preferences) || 0;
-      const recN = Number(c.recommendations) || 0;
-      const apiSet = !!c.hasApiConfig;
-      openConfirm({
-        title: '确认清除「除菜谱外」的数据？',
-        desc: `即将删除：${apiSet ? 'API 配置（已配置）' : 'API 配置（未配置）'}、${prefN} 个偏好标签、${recN} 天的今日推荐缓存。我的菜谱不会被删除。此操作不可恢复。`,
-        danger: false,
-        onOK: async () => {
-          await injected.clearDataExceptRecipes();
-          setStatus('已清除 API / 偏好 / 推荐缓存，菜谱已保留。', 'success');
-          await refreshCounts();
-        },
-      });
-    });
-
     $btnClearRecipes.addEventListener('click', async () => {
       const c = await injected.getDataCounts().catch(() => ({}));
       const n = Number(c.recipes) || 0;
       openConfirm({
         title: '⚠ 确认清除所有菜谱？',
-        desc: `我的菜谱里当前共有 ${n} 条菜谱。点确认后将被全部永久删除，无法恢复。其他数据（API / 偏好 / 推荐缓存）不动。`,
+        desc: `我的菜谱里当前共有 ${n} 条菜谱。点确认后将被全部永久删除，无法恢复。冰箱、API 配置、偏好、推荐缓存均不动。`,
         danger: true,
         onOK: async () => {
           await injected.clearRecipeDataOnly();
           setStatus(`已清除全部 ${n} 条菜谱，其他数据均已保留。`, 'success');
+          await refreshCounts();
+        },
+      });
+    });
+
+    $btnClearFridge.addEventListener('click', async () => {
+      const c = await injected.getDataCounts().catch(() => ({}));
+      const n = Number(c.fridge) || 0;
+      openConfirm({
+        title: '⚠ 确认清空冰箱？',
+        desc: `我的冰箱里当前共有 ${n} 种食材。点确认后将被全部永久删除，无法恢复。菜谱、API 配置、偏好、推荐缓存均不动。`,
+        danger: true,
+        onOK: async () => {
+          await injected.clearFridgeDataOnly();
+          setStatus(`已清空冰箱（${n} 种食材），其他数据均已保留。`, 'success');
+          await refreshCounts();
+        },
+      });
+    });
+
+    $btnClearApi.addEventListener('click', async () => {
+      const c = await injected.getDataCounts().catch(() => ({}));
+      const prefN = Number(c.preferences) || 0;
+      const recN = Number(c.recommendations) || 0;
+      const apiSet = !!c.hasApiConfig;
+      openConfirm({
+        title: '确认清除 API / 偏好 / 推荐缓存？',
+        desc: `即将删除：${apiSet ? 'API 配置（已配置）' : 'API 配置（未配置）'}、主题设置、${prefN} 个偏好标签、${recN} 天的今日推荐缓存。菜谱与冰箱食材不会被删除。此操作不可恢复。`,
+        danger: false,
+        onOK: async () => {
+          await injected.clearApiPrefRecommendOnly();
+          setStatus('已清除 API 配置 / 偏好标签 / 推荐缓存 / 主题设置，菜谱与冰箱已保留。', 'success');
           await refreshCounts();
         },
       });
